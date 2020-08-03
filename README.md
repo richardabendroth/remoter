@@ -1,62 +1,175 @@
 # Remoter
+Remotely resolveable Native Javascript Promise that exposes it's resolver and rejector callbacks
 
-## What is it?
-When the promise getting the data is not directly coreallated with the promise returning the value.
+## Where is it useful?
+* When you want to use ``await`` to wait for events (e.g. ``EventEmitter.on(...)`` or ``await sleep(...)``)
+* When implementing a abortable/cancelable ``Promise`` 
+* When you want to reshape the control flow 
+* When you want a piece of asyncronous code to wait for an external event to happen 
+* When the promise receiving the data is not directly coreallated with the promise returning the value 
 
 ## Usage
-```javscript
-const Remoter = require('remoter');
 
-function resolveIntrinsicly(delay = 0) {
-  const remoter = new Remoter();  
+#### For Sugar
+```javascript
+const Remoter = require('promise-remoter');
+
+function sleepWithPromise (milliseconds = 0) {
+  return new Promise(
+    resolve => setTimeout(resolve, milliseconds)
+  );
+}
+
+async function sleepWithRemoter (milliseconds = 0) {
+  const remoter = new Remoter;
+  setTimeout(remoter.resolve, milliseconds);
   return remoter;
 }
 
-function resolveExtrinsicly(delay = 0) {
-  const remoter = new Remoter();  
+(async () => {
+  const sleepTimeMs = 2e3; 
+  console.log('Sleeping for', sleepTimeMs, 'ms 😴 ...'); 
+  await sleepWithRemoter(sleepTimeMs); 
+  console.log('Done sleeping 🥱'); 
+})(); 
+```
+
+#### For remotely resolving a Promise  
+```javascript
+const Remoter = require('promise-remoter');
+
+function resolveIntrinsicly() {
+  const remoter = new Remoter(
+    resolve => 
+      setTimeout(
+        resolve, 
+        1e3, 
+        'Intrinsically resolved'
+      )
+  );  
   return remoter;
 }
 
+function resolveExtrinsicly() {
+  const remoter = new Remoter();  
+  setTimeout(
+    remoter.resolve, 
+    1e3, 
+    'Extrinsically resolved'
+  ); 
+  return remoter;
+}
 
 async function main() {
-  const remoter = new Remoter;
-
-  console.log('Remoter is resolved?: ', remoter.resolved);
-  console.log('Remoter value', await remoter);
+  await resolveIntrinsicly(); 
+  await resolveExtrinsicly(); 
 }
 
-main.bind(this)();
-
+main.bind(this)(); 
 ```
 
+#### Awaiting Events
+```javascript
+const Remoter = require('promise-remoter');
+const EventEmitter = require('events');
 
+async function nextEventReceived (eventEmitter, eventName) { 
+  const event = new Remoter; 
+  eventEmitter.on(eventName, event.resolve); 
+  return event;  
+}
 
+async function main () {
+  const eventEmitter = new EventEmitter(); 
+  setTimeout(
+    (...args) => {
+      console.log('Emitting event'); 
+      eventEmitter.emit(...args); 
+    }, 
+    1e3, 
+    'myEvent', 
+    'some payload'
+  ); 
+  console.log('Waiting for next myEvent'); 
+  const payload = await nextEventReceived(eventEmitter, 'myEvent'); 
+  console.log('myEvent received with payload:', payload); 
+}
 
-## Why is it not called callbackify(), depromisify() or simply Callback?
-
-I thought about it but after all, since a promise can settle either as fulfilled
-(resolved) or as rejected you need to return a result structure with two
-callbacks. As the intention is to add the idea of a callback back to the concept
-of promises with ES6 async/await syntax convenience.
-I didn't call it Callback as it is a set of multiple callsbacks (which would be
-onDone, onError, etc.). If you want to call it Callback, be my guest:
-
-```javscript
-const Callback = require('remoter');
+main.bind(this)(); 
 ```
 
-or
+#### Cancelling Request Promises
+```javascript
+const Remoter = require('promise-remoter');
 
-```javscript
-import Remoter as Callback;
+class FakeRequest {
+
+  constructor (resolve) {
+    this.running = false; 
+    this.resolve = resolve; 
+    this.timeout = null; 
+  }
+
+  ['get'] (callback) {
+    this.running = true; 
+    const result = 'some result'; 
+    if (this.resolve)
+      this.timeout = setTimeout(
+        callback, 
+        0.5e3, 
+        null, 
+        result
+      ); // Start Fake Request 
+  }
+
+  abort () {
+    clearTimeout(this.timeout); // Cancel Fake Request
+    this.timeout = null; 
+    this.running = false; 
+    console.log('Aborted', this.constructor.name);  
+  }
+}
+
+function request (resolve) {
+  const remoter = new Remoter(); 
+  const request = new FakeRequest(resolve); 
+  const timeout = setTimeout( 
+    () => {
+      console.log('Aborting request because of timeout'); 
+      request.abort(); 
+      remoter.reject(new Error('Request timed out')); 
+    }, 
+    1e3
+  ); 
+  request.get(
+    (error, result) => {
+      clearTimeout(timeout); 
+      if (error) {
+        console.log('Request resulted in an error'); 
+        remoter.reject(error); 
+      } else { 
+        console.log('Request successful'); 
+        remoter.resolve(result); 
+      }
+    }
+  ); 
+  console.log('Request started'); 
+  return remoter; 
+}
+
+async function main () {
+  const result = await request(true); 
+  console.log('1st request resulted in:', result)
+  try { 
+    await request(false); 
+  } catch (error) {
+    console.log('2nd request resulted in error:', error.message); 
+  }
+}
+
+main.bind(this)(); 
 ```
 
-Why is it called Remoter?
+## Open to PR's
 
-I chose the name Remoter since it's the concept of a remotely settled promise.
-
-
-## Couldn't this be achieved by using plain old callbacks?
-
-Yes, but if you want to work with ES6 async/await syntax convenience, you will
-have to promisify before returning.
+PR's welcome! 

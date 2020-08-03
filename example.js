@@ -1,4 +1,4 @@
-const Remoter = require('./Remoter');
+const Remoter = require('./Remoter'); 
 
 function generateLogMessage (caller, remoter, value) {
   return `${caller.name}: resolved ${remoter.remote?'ex':'in'}trinsically with value "${String(value)}" \r\n\
@@ -25,8 +25,7 @@ function sleepWithPromise (milliseconds = 0) {
 async function sleepWithRemoter (milliseconds = 0) {
   const remoter = new Remoter;
   setTimeout(remoter.resolve, milliseconds);
-  await remoter;
-  return;
+  return remoter;
 }
 
 async function resolveExtrinsicly () {
@@ -88,6 +87,82 @@ async function doSomething (value) {
   console.log('And the result: ', result);
 }
 
+class FakeRequest {
+
+  constructor (resolve) {
+    this.running = false; 
+    this.resolve = resolve; 
+    this.timeout = null; 
+  }
+
+  ['get'] (callback) {
+    this.running = true; 
+    const result = 'some result'; 
+    if (this.resolve)
+      this.timeout = setTimeout(
+        callback, 
+        0.5e3, 
+        null, 
+        result
+      );
+  }
+
+  abort () {
+    clearTimeout(this.timeout); 
+    this.timeout = null; 
+    this.running = false;
+    console.log('Aborted', this.constructor.name);  
+  }
+
+}
+
+function requestSomethingWithTimeout (resolve) {
+  const remoter = new Remoter(); 
+  const request = new FakeRequest(resolve); 
+  const timeout = setTimeout( 
+    () => {
+      console.log('Aborting request because of timeout'); 
+      request.abort(); 
+      remoter.reject(new Error('Request timed out')); 
+    }, 
+    1e3
+  ); 
+  request.get(
+    (error, result) => {
+      clearTimeout(timeout); 
+      if (error) {
+        console.log('Request resulted in an error'); 
+        remoter.reject(error); 
+      } else { 
+        console.log('Request successful'); 
+        remoter.resolve(result); 
+      }
+    }
+  ); 
+  console.log('Request started'); 
+  return remoter; 
+}
+
+const EventEmitter = require('events');
+
+async function nextEventReceived () { 
+  const eventEmitter = new EventEmitter(); 
+  const myEvent = new Remoter; 
+  eventEmitter.on('myEvent', myEvent.resolve); 
+  setTimeout(
+    (...args) => {
+      console.log('Emitting event'); 
+      eventEmitter.emit(...args); 
+    }, 
+    1e3, 
+    'myEvent', 
+    'some payload'
+  ); 
+  console.log('Waiting for next myEvent'); 
+  const payload = await myEvent; 
+  console.log('myEvent received with payload:', payload); 
+}
+
 async function main () {
   line();
   resolveExtrinsicly();
@@ -97,6 +172,17 @@ async function main () {
   await sleepWithRemoter(100);
   line();
   await doSomething(42);
+  line();
+  const requestSomethingWithTimeoutResult = await requestSomethingWithTimeout(true); 
+  console.log('Request resulted in:', requestSomethingWithTimeoutResult)
+  line();
+  try { 
+    await requestSomethingWithTimeout(false); 
+  } catch (error) {
+    console.log('Request resulted in error:', error.message); 
+  }
+  line();
+  await nextEventReceived(); 
   line();
   // Use the reomoter to keep the process running for a while and finally terminate
   const remoter = new Remoter();

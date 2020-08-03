@@ -18,8 +18,11 @@
     "callbackify",
     "de-promisify",
     "inverted",
-    "Promise", 
+    "Promise",
     "EventEmitter", 
+    "Await Event", 
+    "Cancel Promise", 
+    "Sleep", 
     "ES6"
   ],
   "author": "Richard Abendroth",

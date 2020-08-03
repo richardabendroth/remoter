@@ -19,6 +19,13 @@ describe(Remoter.name, () => {
     it(`Is an instance of Native Promise`, () => {
       expect(new Remoter instanceof Promise).to.be.true;
     });
+    it(`Executes executor`, () => {
+      let probe = false;
+      const remoter = new Remoter(
+        (resolve, reject) => { probe = true; }
+      );
+      expect(probe).to.be.true;
+    });
     it(`Native signature is preserved`, () => {
       expect(Remoter.resolve).to.equal(Promise.resolve);
       expect(Remoter.reject).to.equal(Promise.reject);
@@ -140,15 +147,29 @@ describe(Remoter.name, () => {
 
     */
   });
-  describe(`Special features`, () => {
-    it(`Executes executor`, () => {
-      let probe = false;
-      const remoter = new Remoter(
-        (resolve, reject) => { probe = true; }
-      );
-      expect(probe).to.be.true;
-    });
-
+  describe(`Remoter specifics`, () => {
+    it(`Protects read-only properties`, () => {
+      const remoter = new Remoter;
+      const readOnlyProperties = [
+        'resolve', 
+        'reject', 
+        'fulfilled', 
+        'resolved', 
+        'rejected', 
+        'remote', 
+        'fulfilledRemotely', 
+        'resolvedRemotely', 
+        'rejectedRemotely'
+      ]; 
+      readOnlyProperties.forEach(
+        readOnlyProperty => {
+          expect(
+            () => remoter[readOnlyProperty] = undefined
+          ).to.throw;
+        }
+      )
+    })
+    
   });
 
 });
