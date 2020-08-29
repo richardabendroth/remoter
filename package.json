@@ -18,12 +18,15 @@
     "callbackify",
     "de-promisify",
     "inverted",
-    "Promise",
+    "Promise", 
+    "Deferred", 
+    "defer", 
     "EventEmitter", 
     "Await Event", 
     "Cancel Promise", 
     "Sleep", 
-    "ES6"
+    "ES6", 
+    "Bluebird"
   ],
   "author": "Richard Abendroth",
   "license": "MIT",

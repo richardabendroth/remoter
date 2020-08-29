@@ -3,6 +3,7 @@ const Remoter = require('./Remoter');
 function generateLogMessage (caller, remoter, value) {
   return `${caller.name}: resolved ${remoter.remote?'ex':'in'}trinsically with value "${String(value)}" \r\n\
     \tfulfilled: ${remoter.fulfilled} \r\n\
+    \tpending: ${remoter.pending} \r\n\
     \tresolved: ${remoter.resolved} \r\n\
     \trejected: ${remoter.rejected} \r\n\
     \tremote: ${remoter.remote} \r\n\
