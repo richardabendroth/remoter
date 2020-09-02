@@ -159,12 +159,15 @@ const remoter = new Remoter;
 ### Settling (resolving and rejecting) the Remoter instance from the outsite 
 
 #### .resolve([value])
-Resolves the remoter instance with the given *value*. Returns the remoter instance. 
+Fulfills or resolves the remoter instance with the given *value*. *value* can be a value or another remoter instance, native promise or thenable. Returns the remoter instance. 
 ```javascript
 const remoter = new Remoter; 
 remoter.then(console.log); // Will output: 42 Remoter [Promise] { 42 }
 remoter.resolve(42); 
 ```
+
+#### .fulfill([value])
+Fulfills the the remoter instance. Alias for [`.resolve([value])`](#resolvevalue). 
 
 #### .reject([error])
 Rejects the remoter instance with the given *error*. Returns the remoter instance. 
@@ -190,6 +193,40 @@ In general, as Remoter is derived from Promise, it can be handed to API's that e
 Remoter can also be used in places where a library that generates promises has a configuration slot for the promise implementation that it uses to generate the promises it returns. 
 
 #### Chaining 
+
+Remoters can be chained like native Promises. 
+
+```javascript
+const Remoter = require('remoter'); 
+
+const remoter = new Remoter; 
+
+remoter.then(
+  value => value+29
+).then(
+  value => value+12
+).then(
+  value => console.log(value) // Will output: 42
+); 
+
+remoter.resolve(1); 
+```
+
+```javascript
+const Remoter = require('remoter'); 
+
+const outerRemoter = new Remoter; 
+const innerRemoter = new Remoter; 
+
+outerRemoter.then(
+  value => console.log(value) // Will output: 42
+); 
+
+outerRemoter.resolve(innerRemoter); 
+innerRemoter.resolve(42); 
+```
+
+#### Composition 
 For chaining, Remoters are meant to be fully compatible to Promises and vice versa: 
 
 |Chain call|Result||
@@ -201,10 +238,16 @@ For chaining, Remoters are meant to be fully compatible to Promises and vice ver
 
 ### Remoter lifecycle properties  
 #### Result-independent Promise status properties
+
 ##### .pending
-Read-only property indicating if the Promise is pending, meaning it has not been resolved or rejected yet. It is ``true`` if both, [.resolved](#resolved) is ``false`` and [.rejected](#rejected) is ``false``. Otherwise it is ``true``. 
+Read-only property indicating that the Remoter is pending, meaning it has not been fulfilled or rejected yet. It is ``true`` if either [.fulfilled](#fulfilled) is ``false`` or [.rejected](#rejected) is ``false``. Otherwise it is ``true``. 
+
 ##### .settled
-Read-only property indicating if the Promise is settled, meaning it has either been resolved or rejected. It is ``true`` if [.resolved](#resolved) is ``true`` or [.rejected](#rejected) is ``true``, otherwise it is ``false``. 
+Read-only property indicating if the Promise is settled, meaning it has either been fulfilled or rejected. It is ``true`` if [.fulfilled](#fulfilled) is ``true`` or [.rejected](#rejected) is ``true``, otherwise it is ``false``. **See ['.resolved'](#resolved)** for also include [chaining](#Chaining) or [composition](#Composition) fates **(which is what you normally want)**. 
+
+##### .resolved
+Read-only property that is `true` if the Promise is either fulfilled or rejected or it followes another Remoter, Promise, or Thenable. It is ``true`` if either [.fulfilled](#fulfilled) or [.rejected](#rejected) is ``true`` (meaning [`.pending`](#pending) is `false`) or it followes another Remoter, Promise or Thenable throgh [chaining](#Chaining) or [composition](#Composition). 
+
 ##### .oversaturated
 Read-only property indicating if there was an attempt to settle the promise more than once. While it is possible to call a reject or resolve callback of a Promise multiple times, the respective settling callbacks get only called once. This property allows for introspection if that happend: 
 ```javascript
@@ -233,16 +276,13 @@ const remoter = new Remoter(
   )
 );
 ```
-If you suspect one of your Promises to be settled more than once, there is an [lifecycle event](#Find-multi-settling-bugs) that helps you in finding out. 
+If you suspect one of your Promises to be settled more than once, there is a [lifecycle event](#Find-multi-settling-bugs) that helps you in finding out. 
 
 #### Result-dependent Promise status properties 
 Remoter offers read-only properties to expose its state to code outside the executor and settling callbacks. Those are set right before the settling callbacks attached via [.then](#then), [.catch](#catch), and [.finally](#finally) are invoked. 
 
-##### .resolved
-Read-only property that is `false` while the Promise is pending. Returns `true` from the moment **right before the user-defined resolver is executed**.
-
 ##### .fulfilled
-Read-only. Alias for [.resolved](#resolved). 
+Read-only property that is `false` while the Promise is pending. Returns `true` from the moment **right before the user-defined resolver is executed**.
 
 ##### .rejected
 Read-only property that is `false` while the Promise is pending. Returns `true` from the moment **right before the user-defined rejector is executed**.
@@ -302,10 +342,13 @@ Read-only property that is `true` when the Remoter has been rejected using [.rej
 Remoter offers status properties to determine if the value or error of a settled Promise has already been delivered to a callback registered via [.then](#thenthencallback-catchcallback), [.catch](#catchcatchcallback), or [.finally](#finallyfinallycallback) at least once. See also [lifecycle events](#oneventName-callback). 
 
 ##### .claimed
-Read-only property that is `true` when the Promise has been resolved and its value has already been delivered to a callback registered via [.then](#thenthencallback-catchcallback) or [.finally](#finallyfinallycallback), otherwise `false`. See also [lifecycle events](#oneventName-callback). 
+Read-only property that is `true` when the Promise has been resolved and its value has already been delivered to a callback registered via [.then](#thenthencallback-catchcallback), otherwise `false`. See also [lifecycle events](#oneventName-callback). 
 
 ##### .caught
-Read-only property that is `true` when the Promise has been rejected and its error has already been delivered to a callback registered via [.catch](#catchcatchcallback) or [.finally](#finallyfinallycallback), otherwise `false`. See also [lifecycle events](#oneventName-callback). 
+Read-only property that is `true` when the Promise has been rejected and its error has already been delivered to a callback registered via [.catch](#catchcatchcallback), otherwise `false`. See also [lifecycle events](#oneventName-callback). 
+
+##### .finalized
+Read-only property that is `true` when the Promise has been resolved or rejected and its value or error has already been delivered to a callback registered via [.finally](#finallyfinallycallback), otherwise `false`. See also [lifecycle events](#oneventName-callback). 
 
 ### Claim settled Remoter results
 Claiming the settled results of the Remoter works exactly like claiming settled results from a Promise. However, there is one slight difference for your convenience. For **named fuctions** and **anonymous functions** (functions that can have their own `this` context), the `this` context is the remoter instance: 
@@ -592,10 +635,12 @@ Subscribe a callback to a lifecycle event of a remoter instance. *callback* will
 |`then`         |A callback has been registered using `.then(callback)`                                  |callback (a reference to the callback that has been registered)    |
 |`catch`        |A callback has been registered using `.catch(callback)` or  `.then(..., callback)`      |callback (a reference to the callback that has been registered)    |
 |`finally`      |A callback has been registered using `.finally(callback)` or `.then(callback, callback)`|callback (a reference to the callback that has been registered)    |
-|`resolved`     |The Remoter has been resolved with a value or with nothing                              |value                                                              |
+|`fulfilled`    |The Remoter has been fulfilled with a value or with nothing                             |value                                                              |
 |`rejected`     |The Remoter has been rejected with an error or with nothing                             |error                                                              |
-|`claimed`      |A result has been delivered to a `.then` or `.finally` callback                         |value, callback (a reference to the callback that has been invoked)|
-|`caught`       |An error has been delivered to a `.catch` or `.finally` callback                        |error, callback (a reference to the callback that has been invoked)|
+|`resolved`     |The Remoter has been resolved to follow another Promise, Remoter or Thenable            |promiseRemoterOrThenable                                           |
+|`claimed`      |A result has been delivered to a `.then` callback                                       |value, callback (a reference to the callback that has been invoked)|
+|`caught`       |An error has been delivered to a `.catch` callback                                      |error, callback (a reference to the callback that has been invoked)|
+|`finalized`    |An error or value has been delivered to a `.finally` callback                           |error, callback (a reference to the callback that has been invoked)|
 |`oversaturated`|The Remoter was resolved or rejected but has already been settled                       |valueOrError                                                       |
 |`*`            |Any of the above events is emitted                                                      |eventName, ...eventArguments (see above)                           |
 
@@ -605,7 +650,7 @@ As **arrow functions** do not have their own `this` context an additional argume
 ```javascript
 const remoter = new Remoter; 
 remoter.on(
-  'resolved', 
+  'fulfilled', 
   (value, remoterInstance) => {
     console.log(`Remoter resolved ${remoterInstance.remote?'externally':'internally'} with value`, value); 
   }
@@ -620,7 +665,7 @@ As **named functions** and **anonymous functions** can have their own `this` con
 ```javascript
 const remoter = new Remoter; 
 remoter.on(
-  'resolved', 
+  'fulfilled', 
   function (remote, value) {
     console.log(`Remoter resolved ${this.remote?'externally':'internally'} with value`, value); 
   }
@@ -631,7 +676,7 @@ remoter.resolve(42);
 Remoter resolved externally with value 42
 ```
 ###### Find multi-settling bugs
-If you miss values or receive unexpected values and you suspect that one of your promises gets resolved twice, both rejected and resolved or any wild combination of that, simply make it an Remoter and throw an error within the `oversaturated` event. 
+If you miss values or receive unexpected values and you suspect that one of your promises gets resolved twice, both rejected and resolved or any wild combination of that, simply make it a Remoter and throw an error within the `oversaturated` event. 
 ```javascript
 const yourPromise = new Remoter(/*your executor that causes the bug*/); 
 yourPromise.on(
@@ -699,6 +744,12 @@ const Remoter = require('remoter');
 console.log(Remoter.Promise === Promise); // Will output: true
 ```
 This is useful in case you [replaced](#Plug-in-replacement) `Promise` with `Remoter`.
+
+##### Remoter.finallyArgument
+`Remoter.finallyArgument` is a boolean property, that when set to *false* prevents passing of an errorOrValue argument to callbacks registered via `.finally`. When set to *true*, enables the this behavior. This setting can be overridden on the remoter instance with the corresponding [`.finallyArgument`](#finallyArgument) property. It is advisable to set this proptery to *false* if the callbacks registered using `.finally` TODO!!!!!!. 
+
+Default is *true*. 
+
 
 ##### Remoter.instanceArgument
 `Remoter.instanceArgument` is a boolean property, that when set to *false* disables the addition of the instance reference to the arguments list when the `.then`, `.catch` and `.finally` callbacks are invoked for those registered callbacks that do not have a prototype (*ArrowFunctions* and *Bound Functions*). When set to *true*, enables this behavior. This setting can be overridden on the remoter instance with the corresponding [`.instanceArgument`](#instanceArgument) property. 
@@ -1065,7 +1116,7 @@ async function main () {
 main.bind(this)(); 
 ```
 
-# Crowd wisdon 
+# Crowd wisdom 
 
 I want Remoter to be as usefull as possible which includes being as lightweight as possible. I'd love to get your opinion especially on the following topics: 
 - Should Remoter stay without dependencies? I thought about using EventEmitter and a pro-forma EventTarget as the internal EventEmitter behind the introspection hooks.  
@@ -1073,6 +1124,9 @@ I want Remoter to be as usefull as possible which includes being as lightweight 
 - For the frontend people: Would you like to have more convenience in terms of transpiling/babeling? 
 - What implementations did you do with Remoter? Which examples are you missing? 
 
+# ToDo
+- Reduce instance heap footprint by moving abstract functions from constructor closure to module scope 
+- Add more examples 
 
 # Open to PR's
 

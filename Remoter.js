@@ -9,7 +9,8 @@ const CB_ERROR = Symbol('Callback Error Token'),
 let globalEventEmitter, 
     globalBoundListeners, 
     globalInstanceArgument = true, 
-    globalFinalllyArgument = true; 
+    globalFinallyArgument = true, 
+    globalNativeComposition = true; 
 
 class Remoter extends Promise {
   
@@ -72,8 +73,7 @@ class Remoter extends Promise {
     }
     return Remoter; 
   }
-  constructor (executor, _id) {
-    const id = _id || Math.floor(Math.random() * 1000);
+  constructor (executor) {
     // Lifecycle tracer instances
     let tracerEventEmitter, 
         tracerBoundListeners; 
@@ -131,7 +131,7 @@ class Remoter extends Promise {
     // Notification emitter for lifecycle events
     const notify = (eventName, ...args) => {
       if (tracerEventEmitter) {
-        tracerEventEmitter.emit('*', eventName, id, ...args);
+        tracerEventEmitter.emit('*', eventName, ...args);
         return tracerEventEmitter.emit(eventName, ...args); 
       }
     }
@@ -147,34 +147,56 @@ class Remoter extends Promise {
     );
     // Define state slots 
     let remote = null,
-        resolved = false,
+        fulfilled = false,
         rejected = false, 
+        oversaturated = false; 
+    // Define fate slots
+    let resolved = false, 
         claimed = false, 
         caught = false, 
-        oversaturated = false;
-    // Decorate Promise callbacks 
-    const resolver = (remotely, ...args) => { 
-      console.log(id, 'resolver called', remotely, resolved, rejected)
-      if (!resolved && !rejected) { 
-        resolved = true; 
+        finalized = false;
+    // Promise callback Decorator 
+    const isPromiseOrThenable = (promiseOrThenable) => 
+      promiseOrThenable && (
+        promiseOrThenable instanceof Remoter.Promise || 
+        !!promiseOrThenable.then
+      );
+    const decorateResolverCalback = (
+      nativeCallback, propertySetter, notificationToken, 
+      remotely, value
+    ) => { 
+      if (!fulfilled && !rejected && !resolved) { 
         remote = remotely; 
-        notify('resolved', ...args); 
-      } else if (resolved || rejected) {
+        if (isPromiseOrThenable(value)) {
+          resolved = true; 
+          notify('resolved', value); 
+        } else {
+          propertySetter(); 
+          notify(notificationToken, value);   
+        }
+      } else {
         oversaturated = true; 
-        notify('oversaturated', ...args); 
+        notify('oversaturated', value); 
       }
-      return nativeResolver.apply(this, args); 
+      return nativeCallback.call(this, value); 
     };
-    const rejector = (remotely, ...args) => { 
-      if (!resolved && !rejected) { 
-        rejected = true; 
-        remote = remotely; 
-        notify('rejected', ...args); 
-      } else if (resolved || rejected) {
-        notify('oversaturated', ...args); 
-      }
-      return nativeRejector.apply(this, args); 
-    };
+    // Decorate Promise callbacks 
+    const resolver = decorateResolverCalback.bind(
+            this, 
+            nativeResolver, 
+            () => fulfilled = true, 
+            'fulfilled'
+          ), 
+          intrinsicResolver = resolver.bind(this, false), 
+          extrinsicResolver = resolver.bind(this, true); 
+    const rejector = decorateResolverCalback.bind(
+            this, 
+            nativeRejector, 
+            () => rejected = true, 
+            'rejected'
+          ), 
+          intrinsicRejecotr = rejector.bind(this, false),  
+          extrinsicRejector = rejector.bind(this, true); 
     // Remoter as a Promise
     let promise = undefined; 
     const getPromise = () => {
@@ -185,7 +207,8 @@ class Remoter extends Promise {
     }
     // Instance Settings
     let instanceArgument = null, 
-        finalllyArgument = null; 
+        finallyArgument = null, 
+        nativeComposition = null; 
     const getInstanceArgument = () => {
       if (instanceArgument === true)
         return true
@@ -195,9 +218,17 @@ class Remoter extends Promise {
         return false; 
     }
     const getFinallyArgument = () => {
-      if (finalllyArgument === true)
+      if (finallyArgument === true)
         return true
-      else if (finalllyArgument == null && globalFinallyArgument === true)
+      else if (finallyArgument == null && globalFinallyArgument === true)
+        return true 
+      else 
+        return false; 
+    }
+    const getNativeComposition = () => {
+      if (nativeComposition === true)
+        return true
+      else if (nativeComposition == null && globalNativeComposition === true)
         return true 
       else 
         return false; 
@@ -240,7 +271,7 @@ class Remoter extends Promise {
       return (...args) => {
         // If error argument is truthy or signature only contains error token, e.g. onError(err)
         if (tokenPresence[CB_ERROR] && (!isCompoundCallback || !!args[tokenPresence[CB_ERROR]])) {
-          rejector.call(this, args[tokenPresence[CB_ERROR]]); 
+          extrinsicRejector.call(this, args[tokenPresence[CB_ERROR]]); 
           return; 
         } 
         // If error arguments are present and at least one is truthy or 
@@ -252,17 +283,16 @@ class Remoter extends Promise {
             false
           ); 
           if (!isCompoundCallback || hasError) {
-            rejector.call(this, errors); 
+            extrinsicRejector.call(this, errors); 
             return; 
           }
         }
         // Resolve if result token present and not rejected 
         if (tokenPresence[CB_RESULT]) 
-          resolver.call(this, true, args[tokenPresence[CB_RESULT]]) 
+          extrinsicResolver.call(this, args[tokenPresence[CB_RESULT]]) 
         else if (tokenPresence[CB_RESULTS]) 
-          resolver.call(
+          extrinsicResolver.call(
             this, 
-            true, 
             args.slice(tokenPresence[CB_RESULTS])
           );
       }
@@ -283,53 +313,68 @@ class Remoter extends Promise {
         return resultErrorCallback = generateCallback(CB_RESULT, CB_ERROR); 
     }
     // Decorate Promise.then, .catch, and .finally for 
-    // - claimed, caught
+    // - claimed, caught, finalized
     // - lifecycle tracing 
     const then = this.then; 
-    const claim = (thenCallback, catchCallback) => {
-      /* TODO: check finally!!!!!! */
-      const isFinally = false; 
-      //getFinallyArgument()
-      /* TODO: check finally!!!!!! */
-      // .then(callback), .finally(callback) decoration 
-      const decoratedThenCallback = thenCallback instanceof Function ? 
-        (...args) => {
-          notify('claimed', ...args, thenCallback); 
-          claimed = true; 
-          if (thenCallback.prototype == undefined && getInstanceArgument())
-            return thenCallback(...args, this) 
-          else if (thenCallback.prototype == undefined)
-            return thenCallback(...args) 
-          else 
-            return thenCallback.apply(this, args); 
-        } : 
-        undefined; 
-      // .catch(callback), .then(undefined, callback), .finally(callback) decoration
-      const decoratedCatchCallback = catchCallback instanceof Function ? 
-        (...args) => {
-          notify('caught', ...args, catchCallback); 
-          caught = true; 
-          if (catchCallback.prototype == undefined && getInstanceArgument())
-            return catchCallback(...args, this) 
-          else if (catchCallback.prototype == undefined)
-            return catchCallback(...args) 
-          else 
-            return catchCallback.apply(this, args); 
-        } : 
-        undefined;
-      // Lifecycle tracing for .then, .catch, or .finally callback registration
-      if (thenCallback instanceof Function && thenCallback === catchCallback)
-        // .finally(callback)
-        notify('finally', thenCallback); 
-      else {
-        // .then(callback)
-        if (thenCallback instanceof Function)
-          notify('then', thenCallback); 
-        // .catch(callback), .then(undefined, callback)
-        if (catchCallback instanceof Function)
-          notify('catch', catchCallback); 
+
+    const decorateCallback = (callback, propertySetter, notificationToken, isFinallyCallback) => 
+      (...args) => {
+        let callbackArgs; 
+        if (!isFinallyCallback || getFinallyArgument())
+          callbackArgs = [...args]; 
+        if (callback.prototype == undefined && getInstanceArgument())
+          callbackArgs.push(this); 
+        propertySetter(); 
+        notify(notificationToken, ...args, callback); 
+        return callback.apply(this, callbackArgs); 
       }
-      return then.call(this, decoratedThenCallback, decoratedCatchCallback); 
+
+    const claim = (thenCallback, catchCallback) => {
+      const isFinally = thenCallback instanceof Function && thenCallback === catchCallback; 
+      let decoratedThenCallback, 
+          decoratedCatchCallback; 
+      if (isFinally) {
+        decoratedThenCallback = decoratedCatchCallback = decorateCallback(
+          thenCallback, 
+          () => finalized = true, 
+          'finalized', 
+          isFinally
+        ); 
+        notify('finally', thenCallback); 
+      } else {
+        if (thenCallback instanceof Function) { 
+          decoratedThenCallback = decorateCallback(
+            thenCallback, 
+            () => claimed = true, 
+            'claimed', 
+            isFinally
+          ); 
+          notify('then', thenCallback);
+        }
+        if (catchCallback instanceof Function) { 
+          decoratedCatchCallback = decorateCallback(
+            catchCallback, 
+            () => caught = true, 
+            'caught', 
+            isFinally
+          ); 
+          notify('catch', catchCallback);
+        }
+      }
+      /* TODO: Check Chaining with Native Promises */
+      const chain = then.call(this, decoratedThenCallback, decoratedCatchCallback); 
+      if (getNativeComposition()) {
+        //return Remoter.resolve(promise); 
+        //const newInstance = new Remoter; 
+        //promise.then(resolve, reject); 
+        //console.log(newInstance)
+        //chain.then(newInstance.resolve.bind(newInstance), newInstance.reject.bind(newInstance)); 
+        //return Promise.resolve(chain);
+        //console.log(chain)
+        return Remoter.resolve(chain); 
+      } else { 
+        return this; 
+      }
     }
     // Define properties
     Object.defineProperties(
@@ -351,13 +396,19 @@ class Remoter extends Promise {
         },
         // Remote setteling
         'resolve': {
-          get: () => (value) => (resolver(true, value), this),
+          get: () => (value) => (extrinsicResolver(value), this),
           set: () => { throw new Error(`Remote resolver (.resolve(value)) is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
+        'fulfill': {
+          get: () => this.resolve,
+          set: () => { throw new Error(`Remote fulfiller (.fulfill(value)) is not mutable on a ${this.constructor.name}.`); },
+          configurable: false,
+          enumerable: false,
+        },
         'reject': {
-          get: () => (value) => (rejector(true, value), this),
+          get: () => (value) => (extrinsicRejector(value), this),
           set: () => { throw new Error(`Remote rejector (.reject(error)) is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false
@@ -389,52 +440,58 @@ class Remoter extends Promise {
         },
         // Result-independent Promise status properties 
         'pending': {
-          get: () => { return !this.settled; }, 
+          get: () => !fulfilled && !rejected, 
           set: () => { throw new Error(`'pending' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         }, 
         'settled': {
-          get: () => !!resolved || !!rejected,
+          get: () => !this.pending,
           set: () => { throw new Error(`'settled' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'oversaturated': {
-          get: () => !!oversaturated,
+          get: () => oversaturated,
           set: () => { throw new Error(`'oversaturated' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         // Result-dependent Promise status properties 
         'resolved': {
-          get: () => !!resolved,
+          get: () => fulfilled || rejected || resolved,
           set: () => { throw new Error(`'resolved' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'fulfilled': {
-          get: () => !!resolved,
+          get: () => fulfilled,
           set: () => { throw new Error(`'fulfilled' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'rejected': {
-          get: () => !!rejected,
+          get: () => rejected,
           set: () => { throw new Error(`'rejected' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         // Result-handling status properties 
         'claimed': {
-          get: () => !!claimed, 
+          get: () => claimed, 
           set: () => { throw new Error(`'claimed' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         }, 
         'caught': {
-          get: () => !!caught, 
+          get: () => caught, 
           set: () => { throw new Error(`'caught' is not mutable on a ${this.constructor.name}.`); },
+          configurable: false,
+          enumerable: false,
+        }, 
+        'finalized': {
+          get: () => !!finalized, 
+          set: () => { throw new Error(`'finalized' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         }, 
@@ -447,25 +504,25 @@ class Remoter extends Promise {
         },
         // Result and remote status sugar
         'settledRemotely': {
-          get: () => this.settled && this.remote,
+          get: () => this.settled && remote == true,
           set: () => { throw new Error(`'fulfilledRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'resolvedRemotely': {
-          get: () => this.resolved && this.remote,
+          get: () => this.resolved && remote == true,
           set: () => { throw new Error(`'resolvedRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'fulfilledRemotely': {
-          get: () => this.resolvedRemotely,
+          get: () => fulfilled && remote == true,
           set: () => { throw new Error(`'fulfilledRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'rejectedRemotely': {
-          get: () => this.rejected && this.remote,
+          get: () => rejected && remote  == true,
           set: () => { throw new Error(`'rejectedRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
@@ -515,6 +572,12 @@ class Remoter extends Promise {
           configurable: false,
           enumerable: false,
         }, 
+        nativeComposition: {
+          get: () => nativeComposition, 
+          set: value => nativeComposition = [null, undefined].includes(value) ? null : !!value, 
+          configurable: false,
+          enumerable: false,
+        }, 
       }
     );
     // Notify tracer 
@@ -523,8 +586,8 @@ class Remoter extends Promise {
     // Execute Executor
     if (executor instanceof Function)
       executor(
-        resolver.bind(this, false),
-        rejector.bind(this, false)
+        intrinsicResolver,
+        intrinsicRejecotr
       );
   }
 }
@@ -575,7 +638,13 @@ Object.defineProperties(
       set: value => globalFinallyArgument = !!value, 
       configurable: false,
       enumerable: false,
-    } 
+    }, 
+    nativeComposition: {
+      get: () => globalNativeComposition, 
+      set: value => globalNativeComposition = !!value, 
+      configurable: false,
+      enumerable: false,
+    }, 
   }
 ); 
 module.exports = Remoter;

@@ -124,70 +124,277 @@ describe(`Testing Framework`, () => {
 
 describe(Remoter.name, () => {
 
+  const defaultForFinallyArgument = Remoter.finallyArgument, 
+        defaultForInstanceArgument = Remoter.instanceArgument, 
+        defaultForNativeComposition = Remoter.nativeComposition; 
+
+  beforeEach(
+    () => { 
+      // Restore Defaults
+      Remoter.finallyArgument = defaultForFinallyArgument; 
+      Remoter.instanceArgument = defaultForInstanceArgument; 
+      Remoter.nativeComposition = defaultForNativeComposition; 
+    }
+  )
+
   const resolvingExecutor = (resolve, reject) => resolve(true);
   const rejectingExecutor = (resolve, reject) => reject(false);
 
-  const promiseAggregators = [
-    Promise.all, 
-    Promise.any, 
-    Promise.race, 
-    Promise.allSettled
-  ].filter(promiseAggregator => promiseAggregator !== undefined); 
-
-  /*  
   describe(`Behaves like a Native Promise`, () => {
+    //*  
     it(`Is an instance of Native Promise`, () => {
       expect(new Remoter).to.be.instanceOf(Promise);
-    }); 
-    
-    it(`Executes executor`, () => {
-      let probe = false;
+    });
+    //*/ 
+    //*
+    it(`Executes executor`, function (done) {
+      this.timeout(5e2); 
       const remoter = new Remoter(
-        (resolve, reject) => { probe = true; }
+        resolve => { resolve(); done(); }
+      );
+    });
+    //*/
+    //*
+    it(`Resolves intriniscally`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result');
+      const remoter = new Remoter(
+        resolve => resolve(result)
       ).then(
-        () => expect(probe).to.be.true
+        value => {
+          expect(value).to.equal(result); 
+          done(); 
+        }
+      )
+    });
+    //*/
+    //*
+    it(`Rejects intriniscally`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result');
+      const remoter = new Remoter(
+        (_, reject) => reject(result)
+      ).catch(
+        error => {
+          expect(error).to.equal(result); 
+          done(); 
+        }
+      )
+    });
+    //*/
+    //*
+    it(`Calls then, then, finally`, function (done) {
+      this.timeout(5e2); 
+      const testThen1Called = new µRemoter, 
+            testThen2Called = new µRemoter, 
+            testFinallyCalled = new µRemoter; 
+      Promise.all(
+        [
+          testThen1Called, 
+          testThen2Called,  
+          testFinallyCalled
+        ]
+      ).then(
+        () => done()
+      )
+      const result = Symbol('result');
+      const remoter = new Remoter(
+        resolve => resolve(result)
+      ); 
+      remoter.then(testThen1Called.resolve); 
+      remoter.then(testThen2Called.resolve); 
+      remoter.finally(testFinallyCalled.resolve); 
+    });
+    //*/
+    //*
+    it(`Calls catch, catch, finally`, function (done) {
+      this.timeout(5e2); 
+      const testCatch1Called = new µRemoter, 
+            testCatch2Called = new µRemoter, 
+            testFinallyCalled = new µRemoter; 
+      Promise.all(
+        [
+          testCatch1Called, 
+          testCatch2Called,  
+          testFinallyCalled
+        ]
+      ).then(
+        () => done()
+      )
+      const result = Symbol('result');
+      const remoter = new Remoter(
+        (_, reject) => reject(result)
+      ); 
+      remoter.catch(testCatch1Called.resolve); 
+      remoter.catch(testCatch2Called.resolve);
+      remoter.finally(testFinallyCalled.resolve);
+    });
+    //*/
+    //*
+    it(`Calls finally without rejection warning`, function (done) {
+      this.timeout(5e2); 
+      Remoter.nativeComposition = true; 
+      const remoter = new Remoter(
+        (_, reject) => reject()
+      ).finally(
+        () => done()
       ); 
     });
+    //*/
+    describe(`Chaining`, () => {
+      //*
+      it(`Resolve Callback composition`, function (done) {
+        this.timeout(5e2); 
+        const testThen1Called = new µRemoter, 
+              testFinally1Called = new µRemoter, 
+              testThen2Called = new µRemoter,  
+              testFinally2Called = new µRemoter; 
+        Promise.all(
+          [
+            testThen1Called, 
+            testFinally1Called, 
+            testThen2Called, 
+            testFinally2Called
+          ]
+        ).then(
+          values => done()
+        )
+        const result = Symbol('result'); 
+        Remoter.nativeComposition = true; 
+        const remoter = new Remoter(
+          (resolve, reject) => resolve(result)
+        ).then(
+          testThen1Called.resolve
+        ).finally(
+          testFinally1Called.resolve
+        ).then(
+          testThen2Called.resolve
+        ).finally(
+          testFinally2Called.resolve
+        ); 
+      });
+      //*/
+      //*
+      it(`Reject Callback Chaining`, function (done) {
+        this.timeout(5e2); 
+        const testCatch1Called = new µRemoter, 
+              testFinally1Called = new µRemoter, 
+              testCatch2Called = new µRemoter,  
+              testFinally2Called = new µRemoter; 
+        Promise.all(
+          [
+            testCatch1Called, 
+            testFinally1Called, 
+            testCatch2Called, 
+            testFinally2Called
+          ]
+        ).then(
+          () => done()
+        )
+        const result = Symbol('result'); 
+        /* TODO: Check whats wrong here */
+        Remoter.nativeComposition = false; 
+        const remoter = new Remoter(
+          (resolve, reject) => reject(result)
+        ).catch(
+          testCatch1Called.resolve
+        ).finally(
+          testFinally1Called.resolve
+        ).catch(
+          testCatch2Called.resolve
+        ).finally(
+          testFinally2Called.resolve
+        ); 
+      });
+      //*/
+      //*
+      it(`Composition: resolve`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        Remoter.nativeComposition = true; 
+        const innerRemoter = new Remoter(
+          resolve => resolve(result)
+        )
+        const outerRemoter = new Remoter(
+          resolve => resolve(innerRemoter)
+        ); 
+        outerRemoter.then(
+          value => {
+            expect(value).to.equal(result); 
+            done(); 
+          }
+        )
+      });
+      //*/
+      //*
+      it(`Composition: reject`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        Remoter.nativeComposition = true; 
+        const innerRemoter = new Remoter(
+          (_, reject) => reject(result)
+        )
+        const outerRemoter = new Remoter(
+          resolve => resolve(innerRemoter)
+        ); 
+        outerRemoter.catch(
+          error => {
+            expect(error).to.equal(result); 
+            done(); 
+          }
+        )
+      });
+      //*/
+      //*
+      it(`Value chaining`, function (done) {
+        this.timeout(5e2); 
+        const result1 = Symbol('result1'), 
+              result2 = Symbol('result2'), 
+              result3 = Symbol('result3'), 
+              result = [result1]; 
+        /* TODO: Check whats wrong here */
+        Remoter.nativeComposition = false; 
+        new Remoter(
+          resolve => resolve(result)
+        ).then(
+          value => value.push(result2)
+        ).then(
+          value => value.push(result3)
+        ).then(
+          value => {
+            expect(value).to.equal(result); 
+            expect(value).to.eql([result1, result2, result3]); 
+            done(); 
+          }
+        );
     
-    //it(`Calles then`, () => {
-    //
-    //});
-    //it(`Calles catch`, () => {
-    //
-    //});
-    
-    it(`Works with ${promiseAggregators.map(promiseAggregator => `${Promise.name}.${promiseAggregator.name}`).join(', ')}`, () => {
-      const remoter = new Remoter().resolve(true);
-      let i = 0; 
-      promiseAggregators.forEach(
-        promiseAggregator => 
-          promiseAggregator.call(Promise, [remoter]).then(
-            v => console.log(i++, v)
-            //valueList => valueList.forEach(
-            //  value => 
-            //    expect(value).to.be.true
-            //)
-          )
-      );
-    }); 
+      });
+      //*/
+    });
+    //*
     it(`Native Class signature is preserved`, () => {
       expect(Remoter.resolve).to.not.equal(Promise.resolve);
       expect(Remoter.reject).to.equal(Promise.reject);
     });
-  });
-  //*/
+    //*/
+
+    /* TODO: Remoter Aggregators with Remoter*/
+  });    
   //*  
   describe(`Interoperability`, () => {
+
     it(`Detects as thenable`, () => {
       const remoter = new Remoter; 
       expect(
         remoter.then != undefined
       ).to.be.true; 
     });
+
     it(`Detects as valid thenable`, () => {
       const remoter = new Remoter; 
       expect(remoter.then instanceof Function).to.be.true; 
     });
+
     it(`Returns identical [Symbol.toStringTag] value`, () => {
       const remoter = new Remoter, 
             promise = new Promise(_ => undefined), 
@@ -196,6 +403,52 @@ describe(Remoter.name, () => {
         Object.prototype.toString.call(remoter) === promiseStringTag
       ).to.be.true; 
     });
+
+    it(`Works with Promise aggregators, e.g. Promise.all`, () => {
+      /*
+      const promiseAggregators = [
+        Promise.all: (() => { const remoter = new Remoter; return {} })(), 
+        Promise.any, 
+        Promise.race, 
+        Promise.allSettled
+      ].filter(promiseAggregator => promiseAggregator !== undefined); 
+
+
+      const promiseAggregators = [
+        Promise.all, 
+        Promise.any, 
+        Promise.race, 
+        Promise.allSettled
+      ].filter(promiseAggregator => promiseAggregator !== undefined); 
+    
+
+      const result = Symbol('result'); 
+      const remoter = new Remoter().resolve(result); 
+      let i = 0; 
+      promiseAggregators.forEach(
+        promiseAggregator => 
+          promiseAggregator.call(Promise, [remoter]).then(
+            valueList => {
+              console.log(valueList); 
+              return 
+              valueList.forEach(
+                value => 
+                  expect(value).to.equal(result)
+              )
+            }
+          )
+      );
+      */
+    }); 
+
+  });
+  //*/
+  //*
+  it(`Resolves Externally`, function (done) {
+    this.timeout(5e2); 
+    const remoter = new Remoter(
+      resolve => { resolve(); done(); }
+    );
   });
   //*/
 
@@ -397,6 +650,7 @@ describe(Remoter.name, () => {
         'remoter', 
         'promise', 
         'resolve', 
+        'fulfill', 
         'reject', 
         'callback', 
         'errorResultCallback', 
@@ -454,10 +708,7 @@ describe(Remoter.name, () => {
       const innerResult = Symbol('innerResult'), 
             outerResult = Symbol('outerResult');       
       const promise = new Promise(
-        resolve => 
-          setImmediate(
-            () => resolve(innerResult)
-          )
+        resolve => setImmediate(resolve, innerResult)
       ); 
       promise.then(
         value => {
@@ -524,9 +775,7 @@ describe(Remoter.name, () => {
           remoterThenTest.resolve(); 
         }
       );
-      setImmediate(
-        () => remoter.resolve(outerResult)
-      ); 
+      setImmediate(remoter.resolve, outerResult); 
     }); 
     //*/
     //*
@@ -547,10 +796,7 @@ describe(Remoter.name, () => {
       const innerResult = Symbol('innerResult'), 
             outerResult = Symbol('outerResult');       
       const remoter = new Remoter(
-        resolve => 
-          setImmediate(
-            () => resolve(innerResult)
-          )
+        resolve => setImmediate(resolve, innerResult)
       ); 
       remoter.then(
         function (value) { 
@@ -617,9 +863,7 @@ describe(Remoter.name, () => {
           promiseThenTest.resolve(); 
         }
       );
-      setImmediate(
-        () => remoter.resolve(outerResult)
-      ); 
+      setImmediate(remoter.resolve, outerResult); 
     }); 
     //*/
     //*
@@ -642,10 +886,7 @@ describe(Remoter.name, () => {
       const innerResult = Symbol('innerResult'), 
             outerResult = Symbol('outerResult');       
       const innerRemoter = new Remoter(
-        resolve => 
-          setImmediate(
-            () => resolve(innerResult)
-          )
+        resolve => setImmediate(resolve, innerResult)
       ); 
       innerRemoter.then(
         function (value) { 
@@ -740,5 +981,172 @@ describe(Remoter.name, () => {
     }); 
     //*/
   });
+  describe(`.remote chaining`, () => {
+    //*
+    it(`Remoter.resolve(remoter): resolve - .remote===true`, function (done) {
+      this.timeout(5e2);  
+      const result = Symbol('result'); 
+      const innerRemoter = new Remoter; 
+      const outerRemoter = Remoter.resolve(innerRemoter); 
+      outerRemoter.then(
+        function (value) {
+          expect(this.remote).to.be.true;
+          expect(innerRemoter.remote).to.equal(this.remote); 
+          expect(value).to.equal(result); 
+          done(); 
+        }
+      );
+      innerRemoter.resolve(result); 
+    }); 
+    //*/
+    //*
+    it(`Remoter.resolve(remoter): resolve .remote===false`, function (done) {
+      this.timeout(5e2);  
+      const result = Symbol('result'); 
+      const innerRemoter = new Remoter(
+        resolve => setImmediate(resolve, result)
+      ); 
+      const outerRemoter = Remoter.resolve(innerRemoter); 
+      outerRemoter.then(
+        function (value) {
+          expect(this.remote).to.be.false;
+          expect(innerRemoter.remote).to.equal(this.remote); 
+          expect(value).to.equal(result); 
+          done(); 
+        }
+      );
+    }); 
+    //*/
+    it(`Remoter.resolve(remoter): reject - .remote===true`, function (done) {
+      this.timeout(5e2);  
+      const result = Symbol('result'); 
+      const innerRemoter = new Remoter; 
+      const outerRemoter = Remoter.resolve(innerRemoter); 
+      outerRemoter.catch(
+        function (value) {
+          expect(this.remote).to.be.true;
+          expect(innerRemoter.remote).to.equal(this.remote); 
+          expect(value).to.equal(result); 
+          done(); 
+        }
+      );
+      innerRemoter.reject(result); 
+    }); 
+    //*/
+  });
+  describe(`.finallyArgument Setting`, () => {
+    //*
+    it(`resolve: .finallyArgument===true`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const remoter = new Remoter; 
+      remoter.finally(
+        valueOrError => {
+          expect(valueOrError).to.equal(result);
+          done(); 
+        }
+      ); 
+      remoter.instanceArgument = false; 
+      remoter.finallyArgument = true; 
+      remoter.resolve(result); 
+    });
+    //*/
+    //*
+    it(`reject: .finallyArgument===true`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const remoter = new Remoter; 
+      remoter.finally(
+        valueOrError => {
+          expect(valueOrError).to.equal(result);
+          done(); 
+        }
+      ); 
+      remoter.instanceArgument = false; 
+      remoter.finallyArgument = true; 
+      remoter.reject(result); 
+    });
+    //*/
+    //*
+    it(`.finallyArgument===false`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const remoter = new Remoter; 
+      remoter.finally(
+        valueOrError => {
+          expect(valueOrError).to.equal(undefined);
+          done(); 
+        }
+      ); 
+      remoter.instanceArgument = false; 
+      remoter.finallyArgument = false; 
+      remoter.resolve(result); 
+    });
+    //*/
+  });
+  describe(`.instanceArgument Setting`, () => {
+    //*
+    it(`No-prototype Function: .instanceArgument===true`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(result);
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      const remoter = new Remoter; 
+      remoter.instanceArgument = true; 
+      remoter.then(callbackWithoutPrototype); 
+      remoter.resolve(result); 
+    });
+    //*/
+    //*
+    it(`No-prototype Function: .instanceArgument===false`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(result);
+        expect(instance == undefined).to.be.true; 
+        done(); 
+      }
+      const remoter = new Remoter; 
+      remoter.instanceArgument = false; 
+      remoter.then(callbackWithoutPrototype); 
+      remoter.resolve(result); 
+    });
+    //*/
+    //*
+    it(`No-prototype Function: .instanceArgument===(default)`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(result);
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      const remoter = new Remoter; 
+      remoter.instanceArgument = null; 
+      remoter.then(callbackWithoutPrototype); 
+      remoter.resolve(result); 
+    });
+    //*/
+    //*
+    it(`Prototype Function: .instanceArgument===true`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result'); 
+      const callbackPrototype = function (value, instance) {
+        expect(value).to.equal(result); 
+        expect(instance == undefined).to.be.true; 
+        done(); 
+      }
+      const remoter = new Remoter; 
+      remoter.instanceArgument = true; 
+      remoter.then(callbackPrototype); 
+      remoter.resolve(result); 
+    });
+    //*/
+
+  });
+
 
 });
