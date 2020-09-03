@@ -40,7 +40,7 @@ class Remoter extends Promise {
     globalEventEmitter.on.apply(globalEventEmitter, [eventName, listener]); 
     return Remoter; 
   }
-  static off (callback) {
+  static off (eventName, callback) {
     // Remove all .off()
     if (callback == undefined) { 
       globalEventEmitter = undefined; 
@@ -51,14 +51,15 @@ class Remoter extends Promise {
     // Remove all listeners for an eventName .off('eventName')
     if (callback == undefined) { 
       globalEventEmitter.removeAllListeners(eventName);
-    // Remove a specific listener for an eventName .off('eventName', listener)
+    // Remove one occurance of a specific listener for an eventName .off('eventName', listener)
     } else {
       const boundListeners = globalBoundListeners.get(callback); 
-      if (Array.isArray(boundListeners)) {
-        boundListeners.forEach(
-          listener => globalEventEmitter.off.call(globalEventEmitter, eventName, listener)
-        )
-      }  
+      if (Array.isArray(boundListeners) && boundListeners.length > 0) {
+        const listener = boundListeners.splice(0, 1)[0]; 
+        globalEventEmitter.off.call(globalEventEmitter, eventName, listener); 
+      } 
+      if (!Array.isArray(boundListeners) || boundListeners.length < 1)
+        globalBoundListeners.delete(callback);
     }
     // If no registered listeners left, destroy lifecycle tracing instances  
     const listenerCount = globalEventEmitter.eventNames().map(
@@ -85,7 +86,12 @@ class Remoter extends Promise {
         tracerBoundListeners = new WeakMap; 
       }
       // Bind this context for listeners
-      const listener = callback.bind(this); 
+      const isNonPrototypeFunction = callback.prototype == undefined; 
+      const listener = (...args) => {
+        return isNonPrototypeFunction ? 
+          callback.call(this, ...args, this) :
+          callback.call(this, ...args); 
+      }
       // Keep reference to original callback
       if (!tracerBoundListeners.has(callback))
         tracerBoundListeners.set(callback, []); 
@@ -109,11 +115,12 @@ class Remoter extends Promise {
       // Remove a specific listener for an eventName .off('eventName', listener)
       } else {
         const boundListeners = tracerBoundListeners.get(callback); 
-        if (Array.isArray(boundListeners)) {
-          boundListeners.forEach(
-            listener => tracerEventEmitter.off.call(tracerEventEmitter, eventName, listener, ...args)
-          )
-        }  
+        if (Array.isArray(boundListeners) && boundListeners.length > 0) {
+          const listener = boundListeners.splice(0, 1)[0]; 
+          tracerEventEmitter.off.call(tracerEventEmitter, eventName, listener); 
+        } 
+        if (!Array.isArray(boundListeners) || boundListeners.length < 1)
+          tracerBoundListeners.delete(callback);
       }
       // If no registered listeners left, destroy lifecycle tracing instances  
       const listenerCount = tracerEventEmitter.eventNames().map(
@@ -151,7 +158,7 @@ class Remoter extends Promise {
         rejected = false, 
         oversaturated = false; 
     // Define fate slots
-    let resolved = false, 
+    let follows = false, 
         claimed = false, 
         caught = false, 
         finalized = false;
@@ -165,15 +172,17 @@ class Remoter extends Promise {
       nativeCallback, propertySetter, notificationToken, 
       remotely, value
     ) => { 
-      if (!fulfilled && !rejected && !resolved) { 
+      if (!fulfilled && !rejected && !follows) { 
         remote = remotely; 
         if (isPromiseOrThenable(value)) {
-          resolved = true; 
-          notify('resolved', value); 
+          follows = true; 
+          notify('follows', value); 
         } else {
           propertySetter(); 
-          notify(notificationToken, value);   
+          notify('settled', value); 
+          notify(notificationToken, value); 
         }
+        notify('resolved', value); 
       } else {
         oversaturated = true; 
         notify('oversaturated', value); 
@@ -243,40 +252,41 @@ class Remoter extends Promise {
         if ([CB_ERRORS, CB_RESULTS].includes(token)) {
           if (tokenIndex < tokens.length - 1)
             throw new Error(`Argument token ${token==CB_ERRORS?'CB_ERRORS':'CB_RESULTS'} is allowed only as the last argument.`); 
-          else if (token == CB_ERRORS && !!tokenPresence[CB_ERROR])
+          else if (token == CB_ERRORS && tokenPresence[CB_ERROR] != undefined)
             throw new Error(`Only one argument token of type CB_ERRORS or CB_ERROR is allowed.`); 
-          else if (token == CB_RESULTS && !!tokenPresence[CB_RESULT])
+          else if (token == CB_RESULTS && tokenPresence[CB_RESULT] != undefined)
             throw new Error(`Only one argument token of type CB_RESULTS or CB_RESULT is allowed.`); 
           tokenPresence[token] = tokenIndex; 
         } else if ([CB_ERROR, CB_RESULT].includes(token)) { 
-            if (!!tokenPresence[token])
-              throw new Error(`Only one argument token if ${token==CB_ERROR?'CB_ERROR':'CB_RESULT'} is allowed.`); 
+            if (tokenPresence[token] != undefined)
+              throw new Error(`Only one argument token of type ${token==CB_ERROR?'CB_ERROR':'CB_RESULT'} is allowed.`); 
             tokenPresence[token] = tokenIndex; 
         }
       }
       // Check if there is at least one argument token
-      if (tokenPresence.length < 1) 
+      if (Object.getOwnPropertySymbols(tokenPresence).length < 1) 
         throw new Error(`No argument token defined.`); 
       // Callback contains both an error and an result token 
-      const isCompoundCallback = [CB_ERROR, CB_ERRORS].flatMap(
-        errorToken => 
-          [CB_RESULT, CB_RESULTS].map(
-            resultToken => [errorToken, resultToken]
-          )
-        ).reduce(
-          (isCompound, tokenCompound) => isCompound || (!!tokenPresence[tokenCompound[0]] && !!tokenPresence[tokenCompound[1]]), 
-          false
-        );
+      const tokenKeys = Object.getOwnPropertySymbols(tokenPresence); 
+      const hasErrorToken = tokenKeys.reduce(
+        (includes, token) => includes || [CB_ERROR, CB_ERRORS].includes(token), 
+        false
+      ); 
+      const hasResultToken = tokenKeys.reduce(
+        (includes, token) => includes || [CB_RESULT, CB_RESULTS].includes(token), 
+        false
+      ); 
+      const isCompoundCallback = hasErrorToken && hasResultToken; 
       // Generate Callback
       return (...args) => {
         // If error argument is truthy or signature only contains error token, e.g. onError(err)
-        if (tokenPresence[CB_ERROR] && (!isCompoundCallback || !!args[tokenPresence[CB_ERROR]])) {
+        if (tokenPresence[CB_ERROR] != undefined && (!isCompoundCallback || !!args[tokenPresence[CB_ERROR]])) {
           extrinsicRejector.call(this, args[tokenPresence[CB_ERROR]]); 
           return; 
         } 
         // If error arguments are present and at least one is truthy or 
         // signature only contains errors token, e.g. onError(err1, err2, ...)
-        if (tokenPresence[CB_ERRORS]) {
+        if (tokenPresence[CB_ERRORS] != undefined) {
           const errors = args.slice(tokenPresence[CB_ERRORS]); 
           const hasError = errors.reduce(
             (anyError, error) => anyError || !!error, 
@@ -286,11 +296,11 @@ class Remoter extends Promise {
             extrinsicRejector.call(this, errors); 
             return; 
           }
-        }
+        } 
         // Resolve if result token present and not rejected 
-        if (tokenPresence[CB_RESULT]) 
+        if (tokenPresence[CB_RESULT] != undefined) 
           extrinsicResolver.call(this, args[tokenPresence[CB_RESULT]]) 
-        else if (tokenPresence[CB_RESULTS]) 
+        else if (tokenPresence[CB_RESULTS] != undefined) 
           extrinsicResolver.call(
             this, 
             args.slice(tokenPresence[CB_RESULTS])
@@ -459,7 +469,7 @@ class Remoter extends Promise {
         },
         // Result-dependent Promise status properties 
         'resolved': {
-          get: () => fulfilled || rejected || resolved,
+          get: () => fulfilled || rejected || follows,
           set: () => { throw new Error(`'resolved' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
@@ -560,19 +570,19 @@ class Remoter extends Promise {
           enumerable: false,
         }, 
         // Compatibility Settings
-        instanceArgument: {
+        'instanceArgument': {
           get: () => instanceArgument, 
           set: value => instanceArgument = [null, undefined].includes(value) ? null : !!value, 
           configurable: false,
           enumerable: false,
         }, 
-        finallyArgument: {
+        'finallyArgument': {
           get: () => finallyArgument, 
           set: value => finallyArgument = [null, undefined].includes(value) ? null : !!value, 
           configurable: false,
           enumerable: false,
         }, 
-        nativeComposition: {
+        'nativeComposition': {
           get: () => nativeComposition, 
           set: value => nativeComposition = [null, undefined].includes(value) ? null : !!value, 
           configurable: false,
@@ -581,8 +591,12 @@ class Remoter extends Promise {
       }
     );
     // Notify tracer 
+    const notifyRemoter = () => {
+      globalEventEmitter.emit('*', 'create', this); 
+      return globalEventEmitter.emit('create', this); 
+    }
     if (globalEventEmitter) 
-      globalEventEmitter.emit('create', this); 
+      setImmediate(notifyRemoter); 
     // Execute Executor
     if (executor instanceof Function)
       executor(

@@ -46,7 +46,7 @@ Remoter is not only a then-able, it's an extension of the native Promise.
 * When the promise receiving the data is [not directly correlated with the `Promise` returning the value](#Limiting-concurrent-requests)
 * When you woder if the cat is dead or alive but [you don't want to open the box](#Lifecycle-Tracing-A-glimpse-into-Schroedingers-Box)
 * When one of your Promises does not have the value it should have or [you suspect it to be settled more than once](#Find-multi-settling-bugs)
-* Other stuff that is totally up to your creativity! (Please let me know 🙏) LINK TO ISSUES
+* Other stuff that is totally up to your creativity! ([Please let me know 🙏](https://github.com/richardabendroth/remoter/issues))
 
 # Installation 
 
@@ -630,19 +630,20 @@ Debugging Promises sometimes feels like fiddeling with the cat in the box. To fi
 
 Subscribe a callback to a lifecycle event of a remoter instance. *callback* will be invoked right before the event occures. The following table lists the events by their *eventName* and the arguments the *callback* is invoked with: 
 
-|Event Name     |Description                                                                             |Callback Arguments                                                 |
-|---------------|----------------------------------------------------------------------------------------|-------------------------------------------------------------------|
-|`then`         |A callback has been registered using `.then(callback)`                                  |callback (a reference to the callback that has been registered)    |
-|`catch`        |A callback has been registered using `.catch(callback)` or  `.then(..., callback)`      |callback (a reference to the callback that has been registered)    |
-|`finally`      |A callback has been registered using `.finally(callback)` or `.then(callback, callback)`|callback (a reference to the callback that has been registered)    |
-|`fulfilled`    |The Remoter has been fulfilled with a value or with nothing                             |value                                                              |
-|`rejected`     |The Remoter has been rejected with an error or with nothing                             |error                                                              |
-|`resolved`     |The Remoter has been resolved to follow another Promise, Remoter or Thenable            |promiseRemoterOrThenable                                           |
-|`claimed`      |A result has been delivered to a `.then` callback                                       |value, callback (a reference to the callback that has been invoked)|
-|`caught`       |An error has been delivered to a `.catch` callback                                      |error, callback (a reference to the callback that has been invoked)|
-|`finalized`    |An error or value has been delivered to a `.finally` callback                           |error, callback (a reference to the callback that has been invoked)|
-|`oversaturated`|The Remoter was resolved or rejected but has already been settled                       |valueOrError                                                       |
-|`*`            |Any of the above events is emitted                                                      |eventName, ...eventArguments (see above)                           |
+|Event Name     |Description                                                                                |Callback Arguments                                                 |
+|---------------|-------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
+|`then`         |A callback has been registered using `.then(callback)`                                     |callback (a reference to the callback that has been registered)    |
+|`catch`        |A callback has been registered using `.catch(callback)` or  `.then(..., callback)`         |callback (a reference to the callback that has been registered)    |
+|`finally`      |A callback has been registered using `.finally(callback)` or `.then(callback, callback)`   |callback (a reference to the callback that has been registered)    |
+|`fulfilled`    |The Remoter has been fulfilled with a value or with nothing                                |value                                                              |
+|`rejected`     |The Remoter has been rejected with an error or with nothing                                |error                                                              |
+|`follows`      |The Remoter has been resolved to follow another Promise, Remoter or Thenable               |promiseRemoterOrThenable                                           |
+|`resolved`     |The Remoter has been resolved to a value or to follow another Promise, Remoter or Thenable |valuePromiseRemoterOrThenable                                      |
+|`claimed`      |A result has been delivered to a `.then` callback                                          |value, callback (a reference to the callback that has been invoked)|
+|`caught`       |An error has been delivered to a `.catch` callback                                         |error, callback (a reference to the callback that has been invoked)|
+|`finalized`    |An error or value has been delivered to a `.finally` callback                              |valueOrError, callback (a reference to the callback that has been invoked)|
+|`oversaturated`|The Remoter was resolved or rejected but has already been settled                          |valueOrError                                                       |
+|`*`            |Any of the above events is emitted                                                         |eventName, ...eventArguments (see above)                           |
 
 The *callback* function can be an **arrow function**, an **anonymous function** or a **named function**. 
 
@@ -665,7 +666,7 @@ As **named functions** and **anonymous functions** can have their own `this` con
 ```javascript
 const remoter = new Remoter; 
 remoter.on(
-  'fulfilled', 
+  'resolved', 
   function (remote, value) {
     console.log(`Remoter resolved ${this.remote?'externally':'internally'} with value`, value); 
   }
@@ -1130,7 +1131,7 @@ I want Remoter to be as usefull as possible which includes being as lightweight 
 
 # Open to PR's
 
-PR's welcome! Please find and fix bugs 🙏. Improvement of the docs very welcome! 
+PR's welcome! Feel free to improve Remoter 🤓. Please find and fix bugs 🙏. Improvement of the docs very welcome! 
 
 # License
 MIT.

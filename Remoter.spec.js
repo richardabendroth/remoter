@@ -134,11 +134,13 @@ describe(Remoter.name, () => {
       Remoter.finallyArgument = defaultForFinallyArgument; 
       Remoter.instanceArgument = defaultForInstanceArgument; 
       Remoter.nativeComposition = defaultForNativeComposition; 
+      // Remove all Event Listeners
+      Remoter.off(); 
+      // Reset native Promise Reference 
+      if (Promise !== Remoter.Promise)
+        Promise = Remoter.Promise; 
     }
   )
-
-  const resolvingExecutor = (resolve, reject) => resolve(true);
-  const rejectingExecutor = (resolve, reject) => reject(false);
 
   describe(`Behaves like a Native Promise`, () => {
     //*  
@@ -155,11 +157,28 @@ describe(Remoter.name, () => {
     });
     //*/
     //*
-    it(`Resolves intriniscally`, function (done) {
+    it(`Fulfills intriniscally`, function (done) {
       this.timeout(5e2); 
       const result = Symbol('result');
       const remoter = new Remoter(
         resolve => resolve(result)
+      ).then(
+        value => {
+          expect(value).to.equal(result); 
+          done(); 
+        }
+      )
+    });
+    //*/
+    //*
+    it(`Resolves intriniscally`, function (done) {
+      this.timeout(5e2); 
+      const result = Symbol('result');
+      const innerRemoter = new Remoter(
+        resolve => resolve(result)
+      ); 
+      const outerRemoter = new Remoter(
+        resolve => resolve(innerRemoter)
       ).then(
         value => {
           expect(value).to.equal(result); 
@@ -473,8 +492,407 @@ describe(Remoter.name, () => {
   });
   //*/
 
+  describe(`Instance Slots`, () => {
+    it(`.remoter returns persistent instance reference to itself`, () => {
+      const remoter = new Remoter; 
+      expect(remoter.remoter).to.equal(remoter); 
+      expect(remoter.remoter).to.equal(remoter.remoter); 
+    });
+    it(`.promise returns persistent instance reference to a following promise`, () => {
+      const remoter = new Remoter; 
+      expect(remoter.promise).to.equal(remoter.promise); 
+    });
+    it(`.promise resolves from remoter instance`, function (done) {
+      this.timeout(5e2); 
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter; 
+      remoter.promise.then(
+        value => {
+          expect(value).to.equal(testValue); 
+          done(); 
+        }
+      ); 
+      remoter.resolve(testValue); 
+    });
+    it(`.promise rejects from remoter instance`, function (done) {
+      this.timeout(5e2); 
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter; 
+      remoter.promise.catch(
+        value => {
+          expect(value).to.equal(testValue); 
+          done(); 
+        }
+      ); 
+      remoter.reject(testValue); 
+    });
+  });
+
+  describe(`Remote Settling Methods`, () => {
+    it(`.resolve`, function (done) {
+      this.timeout(5e2); 
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter; 
+      remoter.promise.then(
+        value => {
+          expect(value).to.equal(testValue); 
+          done(); 
+        }
+      ); 
+      remoter.resolve(testValue); 
+    });
+    it(`.fulfill`, function (done) {
+      this.timeout(5e2); 
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter; 
+      remoter.promise.then(
+        value => {
+          expect(value).to.equal(testValue); 
+          done(); 
+        }
+      ); 
+      remoter.fulfill(testValue); 
+    });
+    it(`.reject`, function (done) {
+      this.timeout(5e2); 
+      const testErr0r = Symbol('value'); 
+      const remoter = new Remoter; 
+      remoter.promise.catch(
+        error => {
+          expect(error).to.equal(testErr0r); 
+          done(); 
+        }
+      ); 
+      remoter.reject(testErr0r); 
+    });
+  });
+
+  describe(`Result Handling Decoration`, () => {
+    it(`.then(onFulfill) Non-prototye Function`, function (done) {
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(testValue); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(callbackWithoutPrototype); 
+      remoter.resolve(testValue); 
+    });
+    it(`.then(onFulfill) Prototye Function`, function (done) {
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (value, instance) {
+        expect(value).to.equal(testValue); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(callbackWithoutPrototype); 
+      remoter.resolve(testValue); 
+    });
+    it(`.catch(onReject) Non-prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (error, instance) => {
+        expect(error).to.equal(testError); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.catch(callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.catch(onReject) Prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (error, instance) {
+        expect(error).to.equal(testError); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.catch(callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.then(undefined, onReject) Non-prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (error, instance) => {
+        expect(error).to.equal(testError); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(undefined, callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.then(undefined, onReject) Prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (error, instance) {
+        expect(error).to.equal(testError); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(undefined, callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.then(onFulfill, onReject) Non-prototye Function`, function (done) {
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(testValue); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(callbackWithoutPrototype, () => {}); 
+      remoter.resolve(testValue); 
+    });
+    it(`.then(onFulfill, onReject) Prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (error, instance) {
+        expect(error).to.equal(testError); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(() => {}, callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.finally(onFinally) Non-prototye Function`, function (done) {
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (value, instance) => {
+        expect(value).to.equal(testValue); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.finally(callbackWithoutPrototype); 
+      remoter.resolve(testValue); 
+    });
+    it(`.finally(onFinally) Prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (error, instance) {
+        expect(error).to.equal(testError); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.finally(callbackWithoutPrototype); 
+      remoter.reject(testError); 
+    });
+    it(`.then(onFinally, onFinally) Non-prototye Function`, function (done) {
+      const testError = Symbol('error'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = (error, instance) => {
+        expect(error).to.equal(testError); 
+        expect(instance).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(callbackWithoutPrototype, callbackWithoutPrototype); 
+      remoter.resolve(testError); 
+    });
+    it(`.then(onFinally, onFinally) Prototye Function`, function (done) {
+      const testValue = Symbol('value'); 
+      const remoter = new Remoter;
+      const callbackWithoutPrototype = function (value, instance) {
+        expect(value).to.equal(testValue); 
+        expect(instance).to.be.undefined; 
+        expect(this).to.equal(remoter); 
+        done(); 
+      }
+      remoter.then(callbackWithoutPrototype, callbackWithoutPrototype); 
+      remoter.reject(testValue); 
+    });
+    describe(`.finallyArgument Setting`, () => {
+      //*
+      it(`resolve: .finallyArgument===true`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.finally(
+          valueOrError => {
+            expect(valueOrError).to.equal(result);
+            done(); 
+          }
+        ); 
+        remoter.instanceArgument = false; 
+        remoter.finallyArgument = true; 
+        remoter.resolve(result); 
+      });
+      //*/
+      //*
+      it(`reject: .finallyArgument===true`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.finally(
+          valueOrError => {
+            expect(valueOrError).to.equal(result);
+            done(); 
+          }
+        ); 
+        remoter.instanceArgument = false; 
+        remoter.finallyArgument = true; 
+        remoter.reject(result); 
+      });
+      //*/
+      //*
+      it(`.finallyArgument===false`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.finally(
+          valueOrError => {
+            expect(valueOrError).to.be.undefined;
+            done(); 
+          }
+        ); 
+        remoter.instanceArgument = false; 
+        remoter.finallyArgument = false; 
+        remoter.resolve(result); 
+      });
+      //*/
+    });
+    describe(`.instanceArgument Setting`, () => {
+      //*
+      it(`Non-prototype Function: .instanceArgument===true`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const callbackWithoutPrototype = (value, instance) => {
+          expect(value).to.equal(result);
+          expect(instance).to.equal(remoter); 
+          done(); 
+        }
+        const remoter = new Remoter; 
+        remoter.instanceArgument = true; 
+        remoter.then(callbackWithoutPrototype); 
+        remoter.resolve(result); 
+      });
+      //*/
+      //*
+      it(`Non-prototype Function: .instanceArgument===false`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const callbackWithoutPrototype = (value, instance) => {
+          expect(value).to.equal(result);
+          expect(instance).to.be.undefined; 
+          done(); 
+        }
+        const remoter = new Remoter; 
+        remoter.instanceArgument = false; 
+        remoter.then(callbackWithoutPrototype); 
+        remoter.resolve(result); 
+      });
+      //*/
+      //*
+      it(`Non-prototype Function: .instanceArgument===(default)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const callbackWithoutPrototype = (value, instance) => {
+          expect(value).to.equal(result);
+          expect(instance).to.equal(remoter); 
+          done(); 
+        }
+        const remoter = new Remoter; 
+        remoter.instanceArgument = null; 
+        remoter.then(callbackWithoutPrototype); 
+        remoter.resolve(result); 
+      });
+      //*/
+      //*
+      it(`Prototype Function: .instanceArgument===true`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        const callbackPrototype = function (value, instance) {
+          expect(value).to.equal(result); 
+          expect(instance).to.be.undefined; 
+          expect(this).to.equal(remoter); 
+          done(); 
+        }
+        remoter.instanceArgument = true; 
+        remoter.then(callbackPrototype); 
+        remoter.resolve(result); 
+      });
+      //*/
+      //*
+      it(`Prototype Function: .instanceArgument===false`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        const callbackPrototype = function (value, instance) {
+          expect(value).to.equal(result); 
+          expect(instance).to.be.undefined; 
+          expect(this).to.equal(remoter); 
+          done(); 
+        }
+        remoter.instanceArgument = false; 
+        remoter.then(callbackPrototype); 
+        remoter.resolve(result); 
+      });
+      //*/
+    });
+  
+  }); 
   
   describe(`Lifecycle Audit properties`, () => {
+    describe(`State`, () => {
+      it(`.fulfilled`, function (done) {
+        const testValue = Symbol('value'); 
+        const remoter = new Remoter; 
+        expect(remoter.fulfilled).to.be.false; 
+        remoter.then(
+          function (value) {
+            expect(value).to.equal(testValue); 
+            expect(remoter.fulfilled).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.resolve(testValue); 
+      });
+      /*
+      .fulfilled (not/internal/external)
+      .rejected (not/internal/external)
+      .pending (not/internal/external)
+      .settled (not/internal/external)
+      .oversaturated (not/internal/external) 
+      //*/
+    });
+
+    describe(`Fate`, () => {
+      /*
+      .resolved (not/internal/external)
+      .claimed (not/internal/external)
+      .caught (not/internal/external)
+      .finalized (not/internal/external)
+      //*/
+    });
+
+    describe(`Realm`, () => {
+      /*
+      .remote (internal/external/null)
+      //*/
+    });
+
+    describe(`Sugar`, () => {
+      /*
+      .settledRemotely (not/internal/external/null)
+      .resolvedRemotely (not/internal/external/null)
+      .fulfilledRemotely (not/internal/external/null) DOCS ARE WRONG!
+      .rejectedRemotely (not/internal/external/null)
+      //*/
+    });
+
+    describe(`Realm`, () => {
+      /*
+      .remote (internal/external/null)
+      //*/
+    });
+
+
     /*
     describe(`Resolved`, () => {
       it(`Extrinsically`, () => {
@@ -631,23 +1049,32 @@ describe(Remoter.name, () => {
   //*
   describe(`Remoter specifics`, () => {
     it(`Protects read-only properties`, () => {
-      const readOnlyStaticProperties = [
+      const readOnlyStaticValues = [
         'Promise', 
         'CB_ERROR', 
         'CB_ERRORS', 
         'CB_RESULT', 
         'CB_RESULTS'
       ]; 
-      readOnlyStaticProperties.forEach(
-        readOnlyProperty => {
-          expect(
-            () => Remoter[readOnlyProperty] = undefined
-          ).to.throw;
+      readOnlyStaticValues.forEach(
+        readOnlyValue => {
+          const value = Remoter[readOnlyValue]; 
+          Remoter[readOnlyValue] = undefined; 
+          expect(Remoter[readOnlyValue]).to.equal(value);
         }
       ); 
       const remoter = new Remoter;
+      const readOnlyInstanceValues = [
+        'remoter'
+      ]; 
+      readOnlyInstanceValues.forEach(
+        readOnlyValue => {
+          const value = remoter[readOnlyValue]; 
+          remoter[readOnlyValue] = undefined; 
+          expect(remoter[readOnlyValue]).to.equal(value);
+        }
+      ); 
       const readOnlyInstanceProperties = [
-        'remoter', 
         'promise', 
         'resolve', 
         'fulfill', 
@@ -664,7 +1091,9 @@ describe(Remoter.name, () => {
         'rejected', 
         'claimed', 
         'caught', 
+        'finalized', 
         'remote', 
+        'settledRemotely', 
         'fulfilledRemotely', 
         'resolvedRemotely', 
         'rejectedRemotely', 
@@ -677,8 +1106,8 @@ describe(Remoter.name, () => {
       readOnlyInstanceProperties.forEach(
         readOnlyProperty => {
           expect(
-            () => remoter[readOnlyProperty] = undefined
-          ).to.throw;
+            () => (remoter[readOnlyProperty] = undefined)
+          ).to.throw();
         }
       ); 
     }); 
@@ -689,7 +1118,7 @@ describe(Remoter.name, () => {
   //*/
 
 
-  describe(`Chaining`, () => {
+  describe(`Composition`, () => {
     //*
     it(`Remoter.resolve(promise) - extrinsic`, function (done) {
       this.timeout(5e2); 
@@ -1034,119 +1463,1214 @@ describe(Remoter.name, () => {
     }); 
     //*/
   });
-  describe(`.finallyArgument Setting`, () => {
-    //*
-    it(`resolve: .finallyArgument===true`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const remoter = new Remoter; 
-      remoter.finally(
-        valueOrError => {
-          expect(valueOrError).to.equal(result);
+
+  describe(`Callback Generation`, () => {
+    describe(`.errorResultCallback`, () => {
+      it(`fulfills on (<falsy>, result)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const {remoter, errorResultCallback} = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.equal(result); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        errorResultCallback(null, result); 
+      }); 
+      it(`rejects on (error, result)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'), 
+              error = Symbol('error'); 
+        const {remoter, errorResultCallback} = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.equal(error); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        errorResultCallback(error, result); 
+      }); 
+      it(`stable callback reference`, function () {
+        const remoter = new Remoter; 
+        expect(remoter.errorResultCallback).to.equal(remoter.errorResultCallback); 
+      }); 
+    }); 
+    describe(`.callback`, () => {
+      it(`is alias for .errorResultCallback`, function () {
+        const remoter = new Remoter; 
+        expect(remoter.callback).to.equal(remoter.errorResultCallback); 
+      }); 
+    }); 
+    describe(`.resultErrorCallback`, () => {
+      it(`fulfills on (result)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const {remoter, resultErrorCallback} = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.equal(result); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        resultErrorCallback(result); 
+      }); 
+      it(`rejects on (result, error)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'), 
+              error = Symbol('error'); 
+        const {remoter, resultErrorCallback} = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.equal(error); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        resultErrorCallback(result, error); 
+      }); 
+      it(`stable callback reference`, function () {
+        const remoter = new Remoter; 
+        expect(remoter.resultErrorCallback).to.equal(remoter.resultErrorCallback); 
+      }); 
+    }); 
+    describe(`.customCallback`, () => {
+      it(`Throws for signature without tokens`, function () {
+        const remoter = new Remoter; 
+        expect(() => remoter.customCallback()).to.throw(); 
+        expect(() => remoter.customCallback(undefined, null)).to.throw(); 
+      }); 
+      it(`Throws for duplicate tokens`, function () {
+        const remoter = new Remoter; 
+        expect(() => remoter.customCallback(Remoter.CB_ERROR, Remoter.CB_ERROR)).to.throw(); 
+        expect(() => remoter.customCallback(Remoter.CB_ERRORS, Remoter.CB_ERRORS)).to.throw(); 
+        expect(() => remoter.customCallback(Remoter.CB_RESULT, Remoter.CB_RESULT)).to.throw(); 
+        expect(() => remoter.customCallback(Remoter.CB_RESULTS, Remoter.CB_RESULTS)).to.throw(); 
+      }); 
+      it(`Throws for combinations of tokens with corresponding array tokens`, function () {
+        const remoter = new Remoter; 
+        expect(() => remoter.customCallback(Remoter.CB_ERROR, Remoter.CB_ERRORS)).to.throw(); 
+        expect(() => remoter.customCallback(Remoter.CB_RESULT, Remoter.CB_RESULTS)).to.throw(); 
+      }); 
+      it(`Throws if array token is not last token`, function () {
+        const remoter = new Remoter; 
+        expect(() => remoter.customCallback(Remoter.CB_ERRORS, undefined)).to.throw(); 
+      }); 
+      it(`Callback returns void (undefined)`, function () {
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        expect(
+          remoter.customCallback(Remoter.CB_RESULT)(result)
+        ).to.be.undefined; 
+      }); 
+      it(`(CB_ERROR) rejects (error)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (error) {
+            expect(error).to.equal(result); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR)(result); 
+      }); 
+      it(`(CB_ERROR) rejects when (<falsy>)`, function (done) {
+        this.timeout(5e2); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (error) {
+            expect(error).to.be.not.ok; 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR)(); 
+      }); 
+      it(`(CB_RESULT) resolves (value)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.equal(result); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_RESULT)(result); 
+      }); 
+      it(`(CB_RESULT) resolves when (<falsy>)`, function (done) {
+        this.timeout(5e2); 
+        const remoter = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.be.not.ok; 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_RESULT)(); 
+      }); 
+      it(`(CB_ERROR, CB_RESULT) rejects (error, result)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'),  
+              error = Symbol('error'); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.equal(error); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR, Remoter.CB_RESULT)(error, result); 
+      }); 
+      it(`(CB_ERROR, CB_RESULT) resolves (<fasly>, result)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'); 
+        const remoter = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.equal(result); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR, Remoter.CB_RESULT)(undefined, result); 
+      }); 
+      it(`(CB_ERROR, CB_RESULTS) resolves (<fasly>, result1, result2)`, function (done) {
+        this.timeout(5e2); 
+        const result1 = Symbol('result1'), 
+              result2 = Symbol('result2'); 
+        const remoter = new Remoter; 
+        remoter.then(
+          function (value) {
+            expect(value).to.eql([result1, result2]); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR, Remoter.CB_RESULTS)(undefined, result1, result2); 
+      }); 
+      it(`(CB_RESULT, CB_ERRORS) rejects (result, error1, error2)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'), 
+              error1 = Symbol('error1'), 
+              error2 = Symbol('error2'); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.eql([error1, error2]); 
+            expect(this.resolvedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_RESULT, Remoter.CB_ERRORS)(undefined, error1, error2); 
+      }); 
+      it(`(CB_ERRORS) rejects ()`, function (done) {
+        this.timeout(5e2); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.eql([]); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERRORS)(); 
+      }); 
+      it(`(undefined, CB_RESULT, null, CB_ERRORS) rejects (true, result, false, error1, error2)`, function (done) {
+        this.timeout(5e2); 
+        const result = Symbol('result'), 
+              error1 = Symbol('error1'), 
+              error2 = Symbol('error2'); 
+        const remoter = new Remoter; 
+        remoter.catch(
+          function (err) {
+            expect(err).to.eql([error1, error2]); 
+            expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(
+          undefined, 
+          Remoter.CB_RESULT, 
+          null, 
+          Remoter.CB_ERRORS
+        )(true, result, false, error1, error2); 
+      }); 
+      it(`getter spawns new callback for identical signatures`, function () {
+        const remoter = new Remoter; 
+        expect(remoter.customCallback(Remoter.CB_ERROR)).to.not.equal(remoter.customCallback(Remoter.CB_ERROR)); 
+      }); 
+    }); 
+  }); 
+  describe(`Lifecycle Events`, () => {
+    describe(`Remoter Emitter`, () => {
+      it ('Registers event listener (eventName, listener)', function (done) {
+        this.timeout(5e2); 
+        const listener = function () {
           done(); 
         }
-      ); 
-      remoter.instanceArgument = false; 
-      remoter.finallyArgument = true; 
-      remoter.resolve(result); 
-    });
-    //*/
-    //*
-    it(`reject: .finallyArgument===true`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const remoter = new Remoter; 
-      remoter.finally(
-        valueOrError => {
-          expect(valueOrError).to.equal(result);
+        const result = Remoter.on('create', listener); 
+        expect(result).to.equal(Remoter); 
+        const remoter = new Remoter; 
+      }); 
+      it ('De-registers event listener (eventName, listener)', function (done) {
+        this.timeout(5e2); 
+        let emitted = 0; 
+        const listener = () => { 
+          emitted++; 
+        }
+        Remoter.on('create', listener).on('create', listener); 
+        const result = Remoter.off('create', listener); 
+        expect(result).to.equal(Remoter); 
+        const remoter = new Remoter; 
+        setImmediate(
+          () => {
+            expect(emitted).to.equal(1); 
+            done(); 
+          }
+        ); 
+      }); 
+      it ('De-registers all event listeners for one event (eventName)', function (done) {
+        this.timeout(5e2); 
+        let didNotEmit = true; 
+        const listener1 = () => { 
+          didNotEmit = false; 
+        }
+        const listener2 = () => { 
+          didNotEmit = false; 
+        }
+        Remoter.on('create', listener1).on('create', listener2); 
+        const result = Remoter.off('create'); 
+        expect(result).to.equal(Remoter); 
+        const remoter = new Remoter; 
+        setImmediate(
+          () => {
+            expect(didNotEmit).to.be.true; 
+            done(); 
+          }
+        ); 
+      }); 
+      it ('De-registers all event listeners ()', function (done) {
+        this.timeout(5e2); 
+        let didNotEmit = true; 
+        const listener1 = () => { 
+          didNotEmit = false; 
+        }
+        const listener2 = () => { 
+          didNotEmit = false; 
+        }
+        Remoter.on('create', listener1).on('*', listener2); 
+        const result = Remoter.off(); 
+        expect(result).to.equal(Remoter); 
+        const remoter = new Remoter; 
+        setImmediate(
+          () => {
+            expect(didNotEmit).to.be.true; 
+            done(); 
+          }
+        ); 
+      }); 
+    }); 
+    describe(`Remoter Events`, () => {
+      //*
+      it (`'create'`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'create'; 
+        let remoter; 
+        const eventListener = function (remoterInstance) {
+          expect(remoterInstance).to.equal(remoter); 
+          testEventListener.resolve(); 
+        }
+        const allListener = function (eventName, remoterInstance) {
+          expect(eventName).to.equal(testEventName); 
+          expect(remoterInstance).to.equal(remoter); 
+          testAllListener.resolve(); 
+        }
+        Remoter.on(testEventName, eventListener); 
+        Remoter.on('*', allListener); 
+        remoter = new Remoter; 
+      }); 
+      //*/
+      //*
+      it (`'*' event explicitly tested via every other event test`, () => {
+        // Purposefully left blank
+      }); 
+      //*/
+    }); 
+    describe(`Instance Emitter`, () => {
+      it ('Registers event listener (eventName, listener)', function (done) {
+        this.timeout(5e2); 
+        const listener = function () {
           done(); 
         }
-      ); 
-      remoter.instanceArgument = false; 
-      remoter.finallyArgument = true; 
-      remoter.reject(result); 
-    });
-    //*/
-    //*
-    it(`.finallyArgument===false`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const remoter = new Remoter; 
-      remoter.finally(
-        valueOrError => {
-          expect(valueOrError).to.equal(undefined);
+        const remoter = new Remoter; 
+        const result = remoter.on('fulfilled', listener); 
+        expect(result).to.equal(remoter); 
+        remoter.resolve(); 
+      }); 
+      it ('De-registers event listener (eventName, listener)', function (done) {
+        this.timeout(5e2); 
+        let emitted = 0; 
+        const listener = () => { 
+          emitted++; 
+        }
+        const remoter = new Remoter; 
+        remoter.on('fulfilled', listener).on('fulfilled', listener); 
+        const result = remoter.off('fulfilled', listener); 
+        expect(result).to.equal(remoter); 
+        remoter.resolve(); 
+        setImmediate(
+          () => {
+            expect(emitted).to.equal(1); 
+            done(); 
+          }
+        ); 
+      }); 
+      it ('De-registers all event listeners for one event (eventName)', function (done) {
+        this.timeout(5e2); 
+        let didNotEmit = true; 
+        const listener1 = () => { 
+          didNotEmit = false; 
+        }
+        const listener2 = () => { 
+          didNotEmit = false; 
+        }
+        const remoter = new Remoter; 
+        remoter.on('fulfilled', listener1).on('fulfilled', listener2); 
+        const result = remoter.off('fulfilled'); 
+        expect(result).to.equal(remoter); 
+        remoter.resolve(); 
+        setImmediate(
+          () => {
+            expect(didNotEmit).to.be.true; 
+            done(); 
+          }
+        ); 
+      }); 
+      it ('De-registers all event listeners ()', function (done) {
+        this.timeout(5e2); 
+        let didNotEmit = true; 
+        const listener1 = () => { 
+          didNotEmit = false; 
+        }
+        const listener2 = () => { 
+          didNotEmit = false; 
+        }
+        const remoter = new Remoter; 
+        remoter.on('fulfilled', listener1).on('*', listener2); 
+        const result = remoter.off(); 
+        expect(result).to.equal(remoter); 
+        remoter.resolve(); 
+        setImmediate(
+          () => {
+            expect(didNotEmit).to.be.true; 
+            done(); 
+          }
+        ); 
+      }); 
+      //*
+      it(`this Argument for non-prototype Function`, function (done) {
+        this.timeout(5e2); 
+        const listenerWithoutPrototype = (...args) => {
+          const instance = args.reverse()[0]; 
+          expect(instance).to.equal(remoter); 
           done(); 
         }
-      ); 
-      remoter.instanceArgument = false; 
-      remoter.finallyArgument = false; 
-      remoter.resolve(result); 
+        const remoter = new Remoter; 
+        remoter.on('fulfilled', listenerWithoutPrototype); 
+        remoter.resolve(); 
+      });
+      //*/
+      //*
+      it(`this Context for prototype Function`, function (done) {
+        this.timeout(5e2); 
+        const listenerWithPrototype = function (...args) {
+          const instance = args.reverse()[0]; 
+          expect(instance).to.not.equal(remoter); 
+          expect(this).to.equal(remoter); 
+          done(); 
+        }
+        const remoter = new Remoter; 
+        remoter.on('fulfilled', listenerWithPrototype); 
+        remoter.resolve(); 
+      });
+      //*/
     });
+    describe(`Instance Events`, () => {
+      //*
+      it (`'then', 'catch' via .then(thenCallback, catchCallback)`, function (done) {
+        this.timeout(5e2); 
+        const testThenListener = new µRemoter, 
+              testCatchListener = new µRemoter, 
+              testAllListenerForThen = new µRemoter, 
+              testAllListenerForCatch = new µRemoter;  
+        Promise.all([
+          testThenListener, 
+          testCatchListener, 
+          testAllListenerForThen, 
+          testAllListenerForCatch
+        ]).then(
+          () => done()
+        )
+        const testThenCallback = () => {}; 
+        const testCatchCallback = () => {}; 
+        let remoter = new Remoter; 
+        remoter.on('then', callback => {
+          expect(callback).to.equal(testThenCallback); 
+          testThenListener.resolve(); 
+        }); 
+        remoter.on('catch', callback => {
+          expect(callback).to.equal(testCatchCallback); 
+          testCatchListener.resolve(); 
+        }); 
+        remoter.on('*', (eventName, callback) => {
+          switch (eventName) {
+            case 'then': 
+              expect(callback).to.equal(testThenCallback);
+              testAllListenerForThen.resolve(); 
+              break; 
+            case 'catch': 
+              expect(callback).to.equal(testCatchCallback);
+              testAllListenerForCatch.resolve(); 
+              break; 
+          }
+        }); 
+        remoter.then(testThenCallback, testCatchCallback);  
+      }); 
+      //*/
+      //*
+      it (`'finally' via .then(finallyCallback, finallyCallback)`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'finally'; 
+        const testCallback = () => {}; 
+        const testValues = [
+          testCallback
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (...args) {
+          expect(args).to.eql(testValues); 
+          testEventListener.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          expect(eventName).to.equal(testEventName); 
+          expect(args).to.eql(testValues); 
+          testAllListener.resolve(); 
+        }
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.then(testCallback, testCallback); 
+      }); 
+      //*/
+      //*
+      it (`'then'`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'then'; 
+        const testCallback = () => {}; 
+        const testValues = [
+          testCallback
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (...args) {
+          expect(args).to.eql(testValues); 
+          testEventListener.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          expect(eventName).to.equal(testEventName); 
+          expect(args).to.eql(testValues); 
+          testAllListener.resolve(); 
+        }
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.then(testCallback); 
+      }); 
+      //*/
+      //*
+      it (`'catch'`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'catch'; 
+        const testCallback = () => {}; 
+        const testValues = [
+          testCallback
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (...args) {
+          expect(args).to.eql(testValues); 
+          testEventListener.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          expect(eventName).to.equal(testEventName); 
+          expect(args).to.eql(testValues); 
+          testAllListener.resolve(); 
+        }
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.catch(testCallback);  
+      }); 
+      //*/
+      //*
+      it (`'finally'`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'finally'; 
+        const testCallback = () => {}; 
+        const testValues = [
+          testCallback
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (...args) {
+          expect(args).to.eql(testValues); 
+          testEventListener.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          expect(eventName).to.equal(testEventName); 
+          expect(args).to.eql(testValues); 
+          testAllListener.resolve(); 
+        }
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.finally(testCallback); 
+      }); 
+      //*/
+      //*
+      it (`'fulfilled', 'settled', 'resolved' via .fulfill`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListenerForEvent = new µRemoter, 
+              testAllListenerForSettled = new µRemoter, 
+              testAllListenerForResolved = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListenerForEvent, 
+          testAllListenerForSettled, 
+          testAllListenerForResolved
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'fulfilled'; 
+        const testValue = Symbol('value'); 
+        const testValues = [
+          testValue
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (testStep, ...args) {
+          expect(args).to.eql(testValues); 
+          testStep.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          switch (eventName) {
+            case testEventName: 
+              eventListener.call(null, testAllListenerForEvent, ...args); 
+              break; 
+            case 'settled': 
+              eventListener.call(null, testAllListenerForSettled, ...args); 
+              break; 
+            case 'resolved': 
+              eventListener.call(null, testAllListenerForResolved, ...args); 
+              break; 
+          }
+        } 
+        remoter.on(testEventName, function (...args) { return eventListener(testEventListener, ...args); } ); 
+        remoter.on('*', allListener); 
+        remoter.fulfill(testValue);  
+      }); 
+      //*/
+      //*
+      it (`'fulfilled', 'settled', 'resolved' via .resolve`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListenerForEvent = new µRemoter, 
+              testAllListenerForSettled = new µRemoter, 
+              testAllListenerForResolved = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListenerForEvent, 
+          testAllListenerForSettled, 
+          testAllListenerForResolved
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'fulfilled'; 
+        const testValue = Symbol('value'); 
+        const testValues = [
+          testValue
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (testStep, ...args) {
+          expect(args).to.eql(testValues); 
+          testStep.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          switch (eventName) {
+            case testEventName: 
+              eventListener.call(null, testAllListenerForEvent, ...args); 
+              break; 
+            case 'settled': 
+              eventListener.call(null, testAllListenerForSettled, ...args); 
+              break; 
+            case 'resolved': 
+              eventListener.call(null, testAllListenerForResolved, ...args); 
+              break; 
+          }
+        } 
+        remoter.on(testEventName, function (...args) { return eventListener(testEventListener, ...args); } ); 
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue);  
+      }); 
+      //*/
+      //*
+      it (`'follows', 'resolved' via .fulfill`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListenerForEvent = new µRemoter, 
+              testAllListenerForResolved = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListenerForEvent, 
+          testAllListenerForResolved
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'follows'; 
+        const testValue = Remoter.resolve(Symbol('value')); 
+        const testValues = [
+          testValue
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (testStep, ...args) {
+          expect(args).to.eql(testValues); 
+          testStep.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          switch (eventName) {
+            case testEventName: 
+              eventListener.call(null, testAllListenerForEvent, ...args); 
+              break; 
+            case 'resolved': 
+              eventListener.call(null, testAllListenerForResolved, ...args); 
+              break; 
+            default: 
+              if (eventName == 'settled') 
+                expect(false, `'settled' event expected not to be emitted`).to.be.true; 
+          }
+        } 
+        remoter.on(testEventName, function (...args) { return eventListener(testEventListener, ...args); } ); 
+        remoter.on('*', allListener); 
+        remoter.fulfill(testValue);  
+      }); 
+      //*/
+      //*
+      it (`'follows', 'resolved' via .resolve`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListenerForEvent = new µRemoter, 
+              testAllListenerForResolved = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListenerForEvent, 
+          testAllListenerForResolved
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'follows'; 
+        const testValue = Remoter.resolve(Symbol('value')); 
+        const testValues = [
+          testValue
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (testStep, ...args) {
+          expect(args).to.eql(testValues); 
+          testStep.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          switch (eventName) {
+            case testEventName: 
+              eventListener.call(null, testAllListenerForEvent, ...args); 
+              break; 
+            case 'resolved': 
+              eventListener.call(null, testAllListenerForResolved, ...args); 
+              break; 
+            default: 
+              if (eventName == 'settled') 
+                expect(false, `'settled' event expected not to be emitted`).to.be.true; 
+          }
+        } 
+        remoter.on(testEventName, function (...args) { return eventListener(testEventListener, ...args); } ); 
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue);  
+      }); 
+      //*/
+      //*
+      it (`'rejected', 'settled', 'resolved' via .reject`, function (done) {
+        this.timeout(5e2); 
+        const testEventListener = new µRemoter, 
+              testAllListenerForEvent = new µRemoter, 
+              testAllListenerForSettled = new µRemoter, 
+              testAllListenerForResolved = new µRemoter; 
+        Promise.all([
+          testEventListener, 
+          testAllListenerForEvent, 
+          testAllListenerForSettled, 
+          testAllListenerForResolved
+        ]).then(
+          () => done()
+        )
+        const testEventName = 'rejected'; 
+        const testValue = Symbol('value'); 
+        const testValues = [
+          testValue
+        ]
+        let remoter = new Remoter; 
+        const eventListener = function (testStep, ...args) {
+          expect(args).to.eql(testValues); 
+          testStep.resolve(); 
+        }
+        const allListener = function (eventName, ...args) {
+          switch (eventName) {
+            case testEventName: 
+              eventListener.call(null, testAllListenerForEvent, ...args); 
+              break; 
+            case 'settled': 
+              eventListener.call(null, testAllListenerForSettled, ...args); 
+              break; 
+            case 'resolved': 
+              eventListener.call(null, testAllListenerForResolved, ...args); 
+              break; 
+          }
+        } 
+        remoter.on(testEventName, function (...args) { return eventListener(testEventListener, ...args); } ); 
+        remoter.on('*', allListener); 
+        remoter.catch(() => {}); 
+        remoter.reject(testValue);  
+      }); 
+      //*/
+      //*
+      it (`'settled' tested explicitly through 'fulfilled', 'rejected'`, () => {
+        // Purposefully left blank
+      });
+      //*/
+      //*
+      it (`'resolved' tested explicitly through 'fulfilled', 'rejected', 'follows'`, () => {
+        // Purposefully left blank
+      });
+      //*/
+      //*
+      it (`'claimed'`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testFinallyDoesNotEmit = new Remoter, 
+              testAllListener = new Remoter; 
+        Promise.all([
+          testEventEmits, 
+          testFinallyDoesNotEmit, 
+          testAllListener
+        ]).then(
+          () => done()
+        ); 
+        let finallyEmittedEvent = false; 
+        const testEventName = 'claimed', 
+              testValue = Symbol('value'), 
+              thenCallback = () => {}, 
+              finallyCallback = () => {}, 
+              testValues = [
+                testValue, 
+                thenCallback
+              ]; 
+        const remoter = new Remoter; 
+        remoter.then(thenCallback); 
+        remoter.finally(finallyCallback); 
+        remoter.on(
+          testEventName, 
+          (value, callback) => {
+            if (callback === finallyCallback) {
+              finallyEmittedEvent = true; 
+              return; 
+            }
+            expect(value).to.equal(testValue); 
+            expect(callback).to.equal(thenCallback); 
+            testEventEmits.resolve(); 
+          }
+        ); 
+        const allListener = function (eventName, ...args) {
+          if (eventName == testEventName) {
+            expect(eventName).to.equal(testEventName); 
+            expect(args).to.eql(testValues); 
+            testAllListener.resolve(); 
+          }
+        }
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue); 
+        setImmediate(
+          () => {
+            expect(finallyEmittedEvent).to.be.false; 
+            testFinallyDoesNotEmit.resolve(); 
+          }
+        );
+      });
+      //*/
+      //*
+      it (`'caught'`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testFinallyDoesNotEmit = new Remoter, 
+              testAllListener = new Remoter; 
+        Promise.all([
+          testEventEmits, 
+          testFinallyDoesNotEmit, 
+          testAllListener
+        ]).then(
+          () => done()
+        ); 
+        let finallyEmittedEvent = false;
+        const testEventName = 'caught', 
+              testError = Symbol('value'), 
+              catchCallback = () => {}, 
+              finallyCallback = () => {}; 
+        const remoter = new Remoter; 
+        remoter.catch(catchCallback); 
+        remoter.finally(finallyCallback); 
+        remoter.on(
+          testEventName, 
+          (error, callback) => {
+            if (callback === finallyCallback) {
+              finallyEmittedEvent = true; 
+              return; 
+            }
+            expect(error).to.equal(testError); 
+            expect(callback).to.equal(catchCallback); 
+            testEventEmits.resolve(); 
+          }
+        ); 
+        const allListener = function (eventName, error, callback) {
+          if (eventName == testEventName) {
+            expect(eventName).to.equal(testEventName); 
+            expect(error).to.equal(testError); 
+            expect(callback).to.equal(catchCallback); 
+            testAllListener.resolve(); 
+          } 
+        }
+        remoter.on('*', allListener); 
+        remoter.reject(testError); 
+        setImmediate(
+          () => {
+            expect(finallyEmittedEvent).to.be.false; 
+            testFinallyDoesNotEmit.resolve(); 
+          }
+        );
+      });
+      //*/
+      //*
+      it (`'finalized' via .resolve`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testAllListener = new Remoter; 
+        Promise.all([
+          testEventEmits, 
+          testAllListener
+        ]).then(
+          () => done()
+        ); 
+        const testEventName = 'finalized', 
+              testValue = Symbol('value'), 
+              eventCallback = () => {}; 
+        const remoter = new Remoter; 
+        remoter.finally(eventCallback); 
+        remoter.on(
+          testEventName, 
+          (value, callback) => {
+            expect(value).to.equal(testValue); 
+            expect(callback).to.equal(eventCallback); 
+            testEventEmits.resolve(); 
+          }
+        ); 
+        const allListener = function (eventName, value, callback) {
+          if (eventName == testEventName) {
+            expect(eventName).to.equal(testEventName); 
+            expect(value).to.equal(testValue); 
+            expect(callback).to.equal(eventCallback); 
+            testAllListener.resolve(); 
+          }
+        }
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue); 
+      });
+      //*/
+      //*
+      it (`'finalized' via .reject`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testAllListener = new Remoter; 
+        Promise.all([
+          testEventEmits, 
+          testAllListener
+        ]).then(
+          () => done()
+        ); 
+        const testEventName = 'finalized', 
+              testError = Symbol('error'), 
+              eventCallback = () => {}; 
+        const remoter = new Remoter; 
+        remoter.finally(eventCallback); 
+        const eventListener = function (error, callback) {
+          expect(error).to.equal(testError); 
+          expect(callback).to.equal(eventCallback); 
+          testEventEmits.resolve(); 
+        }
+        const allListener = function (eventName, error, callback) {
+          if (eventName == testEventName) {
+            expect(eventName).to.equal(testEventName); 
+            expect(error).to.equal(testError); 
+            expect(callback).to.equal(eventCallback); 
+            testAllListener.resolve(); 
+          }
+        }
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.reject(testError); 
+      });
+      //*/
+      //*
+      it (`'oversaturated' via .resolve(promise)`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testDoesNotEmitUnwantedEvents = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventEmits, 
+          testDoesNotEmitUnwantedEvents, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const unwantedEvents = [
+          'fulfilled', 
+          'rejected', 
+          'settled', 
+          'follows', 
+          'resolved', 
+          'called', 
+          'claimed', 
+          'finalized'
+        ]; 
+        const eventsEmitted = []; 
+        const testEventName = 'oversaturated', 
+              testValue = new Remoter(Symbol('value')); 
+        let remoter = new Remoter; 
+        const eventListener = function (valuePromiseRemoterOrThenable) {
+          expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+          testEventEmits.resolve(); 
+        }
+        const allListener = function (eventName, valuePromiseRemoterOrThenable) {
+          if (eventName == testEventName) {
+            expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+            testAllListener.resolve(); 
+          } else {
+            eventsEmitted.push(eventName); 
+          }
+        } 
+        remoter.resolve();  
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue);  
+        setImmediate(
+          () => {
+            const unwantedEventEmitted = eventsEmitted.reduce(
+              (anyEmitted, eventEmitted) => {
+                const wasEmitted = unwantedEvents.includes(eventEmitted); 
+                return anyEmitted || wasEmitted; 
+              }, 
+              false
+            ); 
+            expect(unwantedEventEmitted).to.be.false; 
+            testDoesNotEmitUnwantedEvents.resolve(); 
+          }
+        ); 
+      }); 
+      //*/
+      //*
+      it (`'oversaturated' via .fulfill(value)`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testDoesNotEmitUnwantedEvents = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventEmits, 
+          testDoesNotEmitUnwantedEvents, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const unwantedEvents = [
+          'fulfilled', 
+          'rejected', 
+          'settled', 
+          'follows', 
+          'resolved', 
+          'called', 
+          'claimed', 
+          'finalized'
+        ]; 
+        const eventsEmitted = []; 
+        const testEventName = 'oversaturated', 
+              testValue = Symbol('value'); 
+        let remoter = new Remoter; 
+        const eventListener = function (valuePromiseRemoterOrThenable) {
+          expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+          testEventEmits.resolve(); 
+        }
+        const allListener = function (eventName, valuePromiseRemoterOrThenable) {
+          if (eventName == testEventName) {
+            expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+            testAllListener.resolve(); 
+          } else {
+            eventsEmitted.push(eventName); 
+          }
+        } 
+        remoter.resolve();  
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.resolve(testValue);  
+        setImmediate(
+          () => {
+            const unwantedEventEmitted = eventsEmitted.reduce(
+              (anyEmitted, eventEmitted) => {
+                const wasEmitted = unwantedEvents.includes(eventEmitted); 
+                return anyEmitted || wasEmitted; 
+              }, 
+              false
+            ); 
+            expect(unwantedEventEmitted).to.be.false; 
+            testDoesNotEmitUnwantedEvents.resolve(); 
+          }
+        ); 
+      }); 
+      //*/
+      //*
+      it (`'oversaturated' via .reject(error)`, function (done) {
+        this.timeout(5e2); 
+        const testEventEmits = new µRemoter, 
+              testDoesNotEmitUnwantedEvents = new µRemoter, 
+              testAllListener = new µRemoter; 
+        Promise.all([
+          testEventEmits, 
+          testDoesNotEmitUnwantedEvents, 
+          testAllListener
+        ]).then(
+          () => done()
+        )
+        const unwantedEvents = [
+          'fulfilled', 
+          'rejected', 
+          'settled', 
+          'follows', 
+          'resolved', 
+          'called', 
+          'claimed', 
+          'finalized'
+        ]; 
+        const eventsEmitted = []; 
+        const testEventName = 'oversaturated', 
+              testError = Symbol('error'); 
+        let remoter = new Remoter; 
+        const eventListener = function (valuePromiseRemoterOrThenable) {
+          expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+          testEventEmits.resolve(); 
+        }
+        const allListener = function (eventName, valuePromiseRemoterOrThenable) {
+          if (eventName == testEventName) {
+            expect(valuePromiseRemoterOrThenable).to.equal(valuePromiseRemoterOrThenable); 
+            testAllListener.resolve(); 
+          } else {
+            eventsEmitted.push(eventName); 
+          }
+        } 
+        remoter.resolve();  
+        remoter.on(testEventName, eventListener); 
+        remoter.on('*', allListener); 
+        remoter.reject(testError);  
+        setImmediate(
+          () => {
+            const unwantedEventEmitted = eventsEmitted.reduce(
+              (anyEmitted, eventEmitted) => {
+                const wasEmitted = unwantedEvents.includes(eventEmitted); 
+                return anyEmitted || wasEmitted; 
+              }, 
+              false
+            ); 
+            expect(unwantedEventEmitted).to.be.false; 
+            testDoesNotEmitUnwantedEvents.resolve(); 
+          }
+        ); 
+      }); 
+      //*/
+      //*
+      it (`'*' event explicitly tested via every other event test`, () => {
+        // Purposefully left blank
+      }); 
+      //*/
+
+    });
+  });
+  describe(`Documentation Exampes`, () => {
+    /*
     //*/
   });
-  describe(`.instanceArgument Setting`, () => {
-    //*
-    it(`No-prototype Function: .instanceArgument===true`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const callbackWithoutPrototype = (value, instance) => {
-        expect(value).to.equal(result);
-        expect(instance).to.equal(remoter); 
-        done(); 
-      }
-      const remoter = new Remoter; 
-      remoter.instanceArgument = true; 
-      remoter.then(callbackWithoutPrototype); 
-      remoter.resolve(result); 
-    });
-    //*/
-    //*
-    it(`No-prototype Function: .instanceArgument===false`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const callbackWithoutPrototype = (value, instance) => {
-        expect(value).to.equal(result);
-        expect(instance == undefined).to.be.true; 
-        done(); 
-      }
-      const remoter = new Remoter; 
-      remoter.instanceArgument = false; 
-      remoter.then(callbackWithoutPrototype); 
-      remoter.resolve(result); 
-    });
-    //*/
-    //*
-    it(`No-prototype Function: .instanceArgument===(default)`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const callbackWithoutPrototype = (value, instance) => {
-        expect(value).to.equal(result);
-        expect(instance).to.equal(remoter); 
-        done(); 
-      }
-      const remoter = new Remoter; 
-      remoter.instanceArgument = null; 
-      remoter.then(callbackWithoutPrototype); 
-      remoter.resolve(result); 
-    });
-    //*/
-    //*
-    it(`Prototype Function: .instanceArgument===true`, function (done) {
-      this.timeout(5e2); 
-      const result = Symbol('result'); 
-      const callbackPrototype = function (value, instance) {
-        expect(value).to.equal(result); 
-        expect(instance == undefined).to.be.true; 
-        done(); 
-      }
-      const remoter = new Remoter; 
-      remoter.instanceArgument = true; 
-      remoter.then(callbackPrototype); 
-      remoter.resolve(result); 
-    });
-    //*/
 
-  });
+  /*
+    - Chaining
+    - Composition (is actually tested, check if ok)
+    - .nativeComposition (should be called nativeChaining?!); docs also missing!
 
+
+
+
+
+  */
 
 });
