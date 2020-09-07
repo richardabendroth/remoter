@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://github.com/richardabendroth/remoter/blob/master/remoter.svg" alt="Remoter" width="200"/>
+</p>
+
 # Remoter
 ![GitHub issues](https://img.shields.io/github/issues/richardabendroth/remoter.svg)
 ![license](https://img.shields.io/github/license/richardabendroth/remoter.svg)
