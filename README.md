@@ -45,10 +45,10 @@ function writeFileAsync (fileName, data, options) {
 Remoter is not only a then-able, it's an extension of the native Promise. 
 
 # Where is it useful?
-* When you need to promisify a [callback-based API like `fs`](#promisify-callback-based-apis), anything with a [callback with error and result arguments](#promise), [the other way around](#resulterrorcallback), [two callbacks (e.g. onError, onSuccess)](#remoter-1), or [something odd](#customCallbackargumentToken-argumentToken2--argumentToken2n)
-* When you want to use [`await` to wait for events e.g. `EventEmitter.on(...)`](#awaiting-avents) or [`await sleep(...)`](#for-sugar)
+* When you need to promisify a [callback-based API like `fs`](#promisify-callback-based-apis), anything with a [callback with error and result arguments](#promise), [the other way around](#resulterrorcallback), [two callbacks (e.g. onError, onSuccess)](#remoter-1), or [something odd](#customcallbackargumenttoken-argumenttoken2--argumenttoken2n)
+* When you want to use [`await` to wait for events e.g. `EventEmitter.on(...)`](#awaiting-events) or [`await sleep(...)`](#for-sugar)
 * When implementing an [abortable/cancelable `Promise`](#cancelling-request-promises)
-* When your code looks like [a funny mix of `await`, `new Promise`, and `() => 'Arrow Functions'`](#remotely-resolving-a-Promise) or [looks like a callback hell](#avoid-async-callback-hells)
+* When your code looks like [a funny mix of `await`, `new Promise`, and `() => 'Arrow Functions'`](#remotely-resolving-a-promise) or [looks like a callback hell](#avoid-async-callback-hells)
 * When you generally want to reshape control flow
 * When you want a piece of asynchronous code [to wait for an external event to happen](#awaiting-events)
 * When the promise receiving the data is [not directly correlated with the `Promise` returning the value](#limiting-concurrent-requests)
