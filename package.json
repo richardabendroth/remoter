@@ -1,6 +1,6 @@
 {
   "name": "remoter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Remotely resolveable Native Javascript Promise that exposes it's resolver and rejector callbacks and a debugging API with lifecycle events",
   "main": "Remoter.js",
   "scripts": {
