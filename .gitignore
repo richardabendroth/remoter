@@ -3,3 +3,5 @@
 /node_modules
 !/.gitignore
 /package-lock.json
+/teststuff.js
+/EventEmitter.js
