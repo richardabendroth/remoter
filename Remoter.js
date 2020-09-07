@@ -1,5 +1,7 @@
 'use strict'
 
+const NativePromise = Promise; 
+
 const CB_ERROR = Symbol('Callback Error Token'), 
       CB_ERRORS = Symbol('Callback Error Array Token'), 
       CB_RESULT = Symbol('Callback Result Token'), 
@@ -9,8 +11,7 @@ const CB_ERROR = Symbol('Callback Error Token'),
 let globalEventEmitter, 
     globalBoundListeners, 
     globalInstanceArgument = true, 
-    globalFinallyArgument = true, 
-    globalNativeComposition = true; 
+    globalFinallyArgument = true; 
 
 class Remoter extends Promise {
   
@@ -42,7 +43,7 @@ class Remoter extends Promise {
   }
   static off (eventName, callback) {
     // Remove all .off()
-    if (callback == undefined) { 
+    if (eventName == undefined && callback == undefined) { 
       globalEventEmitter = undefined; 
       globalBoundListeners = undefined; 
     }
@@ -86,18 +87,19 @@ class Remoter extends Promise {
         tracerBoundListeners = new WeakMap; 
       }
       // Bind this context for listeners
-      const isNonPrototypeFunction = callback.prototype == undefined; 
+      const isNonPrototypeFunction = (callback.prototype == undefined); 
       const listener = (...args) => {
-        return isNonPrototypeFunction ? 
-          callback.call(this, ...args, this) :
-          callback.call(this, ...args); 
+        if (isNonPrototypeFunction)  
+          void callback.call(this, ...args, this)
+        else 
+          void callback.call(this, ...args); 
       }
       // Keep reference to original callback
       if (!tracerBoundListeners.has(callback))
         tracerBoundListeners.set(callback, []); 
       tracerBoundListeners.get(callback).push(listener); 
       // Register bound callback as listener
-      tracerEventEmitter.on.apply(tracerEventEmitter, [eventName, listener, ...args]); 
+      void tracerEventEmitter.on(eventName, listener, ...args); 
       return this; 
     }
     // Unsubscribe handler for lifecycle events
@@ -111,16 +113,16 @@ class Remoter extends Promise {
         return this; 
       // Remove all listeners for an eventName .off('eventName')
       if (callback == undefined) { 
-        tracerEventEmitter.removeAllListeners(eventName);
+        void tracerEventEmitter.removeAllListeners(eventName);
       // Remove a specific listener for an eventName .off('eventName', listener)
       } else {
         const boundListeners = tracerBoundListeners.get(callback); 
         if (Array.isArray(boundListeners) && boundListeners.length > 0) {
           const listener = boundListeners.splice(0, 1)[0]; 
-          tracerEventEmitter.off.call(tracerEventEmitter, eventName, listener); 
+          void tracerEventEmitter.off(eventName, listener); 
         } 
         if (!Array.isArray(boundListeners) || boundListeners.length < 1)
-          tracerBoundListeners.delete(callback);
+          void tracerBoundListeners.delete(callback);
       }
       // If no registered listeners left, destroy lifecycle tracing instances  
       const listenerCount = tracerEventEmitter.eventNames().map(
@@ -136,12 +138,31 @@ class Remoter extends Promise {
       return this; 
     }
     // Notification emitter for lifecycle events
-    const notify = (eventName, ...args) => {
-      if (tracerEventEmitter) {
-        tracerEventEmitter.emit('*', eventName, ...args);
-        return tracerEventEmitter.emit(eventName, ...args); 
+    const emitClassEvents = (eventName, remoterInstance, ...args) => {
+      if (globalEventEmitter) {
+        void globalEventEmitter.emit('*', eventName, remoterInstance, ...args); 
+        void globalEventEmitter.emit(eventName, remoterInstance, ...args); 
+        return true; 
       }
+      return false; 
     }
+    const emitInstanceEvents = (eventName, ...args) => {
+      if (tracerEventEmitter) {
+        void tracerEventEmitter.emit('*', eventName, ...args);
+        void tracerEventEmitter.emit(eventName, ...args); 
+        return true; 
+      } 
+      return false; 
+    }
+    const notify = (cache, eventName, ...args) => {
+      if (cache || !emitClassEvents(eventName, this, ...args)) 
+        setImmediate(emitClassEvents.bind(this, eventName, this, ...args)); 
+      if (cache || !emitInstanceEvents(eventName, ...args)) 
+        setImmediate(emitInstanceEvents.bind(this, eventName, ...args)); 
+    }
+    setImmediate(
+      () => emitClassEvents('create', this)
+    ); 
     // Closure properies context
     let nativeResolver, 
         nativeRejector; 
@@ -176,16 +197,16 @@ class Remoter extends Promise {
         remote = remotely; 
         if (isPromiseOrThenable(value)) {
           follows = true; 
-          notify('follows', value); 
+          void notify(!remotely, 'follows', value); 
         } else {
           propertySetter(); 
-          notify('settled', value); 
-          notify(notificationToken, value); 
+          void notify(!remotely, notificationToken, value); 
+          void notify(!remotely, 'settled', value); 
         }
-        notify('resolved', value); 
+        notify(!remotely, 'resolved', value); 
       } else {
         oversaturated = true; 
-        notify('oversaturated', value); 
+        void notify(!remotely, 'oversaturated', value); 
       }
       return nativeCallback.call(this, value); 
     };
@@ -205,7 +226,7 @@ class Remoter extends Promise {
             'rejected'
           ), 
           intrinsicRejecotr = rejector.bind(this, false),  
-          extrinsicRejector = rejector.bind(this, true); 
+          extrinsicRejector = rejector.bind(this, true);  
     // Remoter as a Promise
     let promise = undefined; 
     const getPromise = () => {
@@ -216,8 +237,7 @@ class Remoter extends Promise {
     }
     // Instance Settings
     let instanceArgument = null, 
-        finallyArgument = null, 
-        nativeComposition = null; 
+        finallyArgument = null; 
     const getInstanceArgument = () => {
       if (instanceArgument === true)
         return true
@@ -230,14 +250,6 @@ class Remoter extends Promise {
       if (finallyArgument === true)
         return true
       else if (finallyArgument == null && globalFinallyArgument === true)
-        return true 
-      else 
-        return false; 
-    }
-    const getNativeComposition = () => {
-      if (nativeComposition === true)
-        return true
-      else if (nativeComposition == null && globalNativeComposition === true)
         return true 
       else 
         return false; 
@@ -326,7 +338,6 @@ class Remoter extends Promise {
     // - claimed, caught, finalized
     // - lifecycle tracing 
     const then = this.then; 
-
     const decorateCallback = (callback, propertySetter, notificationToken, isFinallyCallback) => 
       (...args) => {
         let callbackArgs; 
@@ -335,7 +346,7 @@ class Remoter extends Promise {
         if (callback.prototype == undefined && getInstanceArgument())
           callbackArgs.push(this); 
         propertySetter(); 
-        notify(notificationToken, ...args, callback); 
+        notify(false, notificationToken, ...args, callback); 
         return callback.apply(this, callbackArgs); 
       }
 
@@ -350,7 +361,7 @@ class Remoter extends Promise {
           'finalized', 
           isFinally
         ); 
-        notify('finally', thenCallback); 
+        notify(false, 'finally', thenCallback); 
       } else {
         if (thenCallback instanceof Function) { 
           decoratedThenCallback = decorateCallback(
@@ -359,7 +370,7 @@ class Remoter extends Promise {
             'claimed', 
             isFinally
           ); 
-          notify('then', thenCallback);
+          notify(false, 'then', thenCallback);
         }
         if (catchCallback instanceof Function) { 
           decoratedCatchCallback = decorateCallback(
@@ -368,23 +379,14 @@ class Remoter extends Promise {
             'caught', 
             isFinally
           ); 
-          notify('catch', catchCallback);
+          notify(false, 'catch', catchCallback);
         }
       }
-      /* TODO: Check Chaining with Native Promises */
-      const chain = then.call(this, decoratedThenCallback, decoratedCatchCallback); 
-      if (getNativeComposition()) {
-        //return Remoter.resolve(promise); 
-        //const newInstance = new Remoter; 
-        //promise.then(resolve, reject); 
-        //console.log(newInstance)
-        //chain.then(newInstance.resolve.bind(newInstance), newInstance.reject.bind(newInstance)); 
-        //return Promise.resolve(chain);
-        //console.log(chain)
-        return Remoter.resolve(chain); 
-      } else { 
-        return this; 
-      }
+      return super.then.call(
+        this, 
+        decoratedThenCallback, 
+        decoratedCatchCallback
+      ); 
     }
     // Define properties
     Object.defineProperties(
@@ -582,21 +584,8 @@ class Remoter extends Promise {
           configurable: false,
           enumerable: false,
         }, 
-        'nativeComposition': {
-          get: () => nativeComposition, 
-          set: value => nativeComposition = [null, undefined].includes(value) ? null : !!value, 
-          configurable: false,
-          enumerable: false,
-        }, 
       }
     );
-    // Notify tracer 
-    const notifyRemoter = () => {
-      globalEventEmitter.emit('*', 'create', this); 
-      return globalEventEmitter.emit('create', this); 
-    }
-    if (globalEventEmitter) 
-      setImmediate(notifyRemoter); 
     // Execute Executor
     if (executor instanceof Function)
       executor(
@@ -610,7 +599,7 @@ Object.defineProperties(
   {
     // Native Promise Reference
     Promise: {
-      value: Promise, 
+      value: NativePromise, 
       writeable: false, 
       configurable: false,
       enumerable: false,
@@ -653,12 +642,6 @@ Object.defineProperties(
       configurable: false,
       enumerable: false,
     }, 
-    nativeComposition: {
-      get: () => globalNativeComposition, 
-      set: value => globalNativeComposition = !!value, 
-      configurable: false,
-      enumerable: false,
-    }, 
   }
 ); 
 module.exports = Remoter;
@@ -687,9 +670,8 @@ class EventEmitter {
         'on': {
           get: () => 
             (eventName, callback) => {
-              if (!(eventName in listeners)) {
+              if (!(eventName in listeners)) 
                 listeners[eventName] = [];
-              }
               listeners[eventName].push(callback); 
               return this; 
             }, 

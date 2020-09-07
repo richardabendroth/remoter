@@ -58,7 +58,7 @@ npm install remoter
 
 ## Quick Start 
 
-### Node (require) 
+### require 
 ```javascript
 const Remoter = require('remoter'); 
 const remoter = new Remoter;
@@ -79,9 +79,9 @@ remoter.then(
 resolve('The answer is 42'); 
 ```
 
-### Web (import)
+### import
 ```javascript
-import Remoter from 'remoter'; 
+import * as Remoter from 'remoter'; 
 const remoter = new Remoter;
 remoter.then(
   (value) => console.log(value)
@@ -108,13 +108,13 @@ Remoter.on(
         console.log(`${instanceId}:`, ...args) 
     )
   }
-)
+); 
 // You might want to disable Remoter.instanceArgument if your claiming callbacks
 // in .then, .catch and .finally accept more than one argument 🙈
 Remoter.instanceArgument = false; 
 // You also might want to disable .finallyArgument if your claiming .finally 
 // callbacks accept arguments 🙉
-Remoter.finalllyArgument = false; 
+Remoter.finallyArgument = false; 
 
 Promise = Remoter; 
 
@@ -124,7 +124,7 @@ const promise = new Promise(
   (resolve, reject) => {
     //...
     resolve(true); // <someId>: resolved true
-    resolve('uh oh 😯'); // <someId>: oversaturated uh oh 😯
+    reject('uh oh 😯'); // <someId>: oversaturated uh oh 😯
   }
 ); // <someId>: Remoter created
 ```
@@ -254,27 +254,27 @@ Read-only property indicating if there was an attempt to settle the promise more
 const Remoter = require('remoter'); 
 
 function oversaturationLog () {
-  if (this.oversaturated)
-    console.log(`I feel fulfilled 😊`); 
-  else 
-    console.log(`I got too much 🤢`); 
-}
-
-const remoter = new Remoter(
-  (resolve, reject) => {
-    setTimeout(
-      reject, 
-      1e3, 
-      new Error('The cat is a dog ideed')
-    ); 
-    resolve(); 
+    if (!this.oversaturated)
+      console.log(`I feel fulfilled 😊`); 
+    else 
+      console.log(`I got too much 🤢`); 
   }
-  remoter.finally(oversaturationLog); // I feel fulfilled 😊
-  setTimeout(
+  
+const remoter = new Remoter(
+    (resolve, reject) => {
+        setTimeout(
+            reject, 
+            1e3, 
+            new Error('The cat is a dog ideed')
+        ); 
+        resolve(); 
+    }
+); 
+remoter.finally(oversaturationLog); // I feel fulfilled 😊
+setTimeout(
     oversaturationLog.bind(remoter), // I got too much 🤢
     1.5e3
-  )
-);
+); 
 ```
 If you suspect one of your Promises to be settled more than once, there is a [lifecycle event](#Find-multi-settling-bugs) that helps you in finding out. 
 
@@ -306,7 +306,7 @@ resolvedFromOutside.then(
 const Remoter = require('remoter'); 
 const resolvedInExecutor = new Remoter(
   resolve => resolve()
-)
+);
 resolvedInExecutor.then(
   function () {
     console.log(this.remote); // Will output: false
@@ -315,7 +315,7 @@ resolvedInExecutor.then(
 ```
 ```javascript
 const Remoter = require('remoter'); 
-const resolvedRightAway = new Remoter.resolve(); 
+const resolvedRightAway = Remoter.resolve(); 
 resolvedRightAway.then(
   function () {
     console.log(this.remote); // Will output: false
@@ -370,15 +370,15 @@ To circumvent this behavior you can use a **bound function** with a custom `this
 const remoter = new Remoter; 
 
 remoter.then(
-  (value, remoterInstance) => {
-    console.log(`Remoter resolved ${remoterInstace.remote?'remotely ':''}with value`, value); 
-    // Will output: Remoter resolved remotely with value 42
-  }
+    (value, remoterInstance) => {
+        console.log(`Remoter resolved ${remoterInstance.remote?'remotely ':''}with value`, value); 
+        // Will output: Remoter resolved remotely with value 42
+    }
 ); 
 
-const thenCallback = function (value, remoterInstance) {
-  console.log(`Remoter resolved ${remoterInstace.remote?'remotely ':''}with value`, value); 
-  // Will output: Remoter resolved remotely with value 42
+const thenCallback = function (value) {
+    console.log(`Remoter resolved ${remoter.remote?'remotely ':''}with value`, value); 
+    // Will output: Remoter resolved remotely with value 42
 }
 
 remoter.then(
@@ -434,26 +434,26 @@ Example:
 const Remoter = require('remoter');
 
 function echoFunctionWithOddCallbackAPI(data, onSuccess, onError) {
-  if (!data) 
-    onError(
-      new Error(`No data to echo 😢`)
-    ); 
-  else
-    onSuccess(data); 
+    if (!data) 
+        onError(
+            new Error(`No data to echo 😢`)
+        )
+    else
+        onSuccess(data); 
 }
-
+  
 function asyncEchoFunction(data) {
-  const {remoter, resolve, reject} = new Remoter; 
-  echoFunctionWithOddCallbackAPI(data, resolve, reject); 
-  return remoter; 
+    const {remoter, resolve, reject} = new Remoter; 
+    echoFunctionWithOddCallbackAPI(data, resolve, reject); 
+    return remoter; 
 }
-
+  
 asyncEchoFunction(
-  'stuff'
+    'stuff'
 ).then(
-  value => 
-    console.log(value) // Will output: stuff
-)
+    value => 
+        console.log(value) // Will output: stuff
+); 
 ```
 
 #### .promise 
@@ -558,7 +558,7 @@ import * as Remoter from 'remoter';
 class FakeRequest {
   constructor (options = {}) {
     this.onError = options.onError; 
-    this.onSuccess options.onSuccess;
+    this.onSuccess = options.onSuccess;
   }
   load (isSuccess = true) {
     if (isSuccess && this.onSuccess)
@@ -637,12 +637,13 @@ Subscribe a callback to a lifecycle event of a remoter instance. *callback* will
 |`finally`      |A callback has been registered using `.finally(callback)` or `.then(callback, callback)`   |callback (a reference to the callback that has been registered)    |
 |`fulfilled`    |The Remoter has been fulfilled with a value or with nothing                                |value                                                              |
 |`rejected`     |The Remoter has been rejected with an error or with nothing                                |error                                                              |
+|`settled`      |The Remoter has been rejected or resolved with a value or error                            |valueOrerror                                                       |
 |`follows`      |The Remoter has been resolved to follow another Promise, Remoter or Thenable               |promiseRemoterOrThenable                                           |
 |`resolved`     |The Remoter has been resolved to a value or to follow another Promise, Remoter or Thenable |valuePromiseRemoterOrThenable                                      |
 |`claimed`      |A result has been delivered to a `.then` callback                                          |value, callback (a reference to the callback that has been invoked)|
 |`caught`       |An error has been delivered to a `.catch` callback                                         |error, callback (a reference to the callback that has been invoked)|
 |`finalized`    |An error or value has been delivered to a `.finally` callback                              |valueOrError, callback (a reference to the callback that has been invoked)|
-|`oversaturated`|The Remoter was resolved or rejected but has already been settled                          |valueOrError                                                       |
+|`oversaturated`|The Remoter was resolved or rejected but has already been settled                          |valuePromiseRemoterOrThenable                                      |
 |`*`            |Any of the above events is emitted                                                         |eventName, ...eventArguments (see above)                           |
 
 The *callback* function can be an **arrow function**, an **anonymous function** or a **named function**. 
@@ -653,6 +654,7 @@ const remoter = new Remoter;
 remoter.on(
   'fulfilled', 
   (value, remoterInstance) => {
+    // Will output: Remoter resolved externally with value 42
     console.log(`Remoter resolved ${remoterInstance.remote?'externally':'internally'} with value`, value); 
   }
 ); 
@@ -667,7 +669,8 @@ As **named functions** and **anonymous functions** can have their own `this` con
 const remoter = new Remoter; 
 remoter.on(
   'resolved', 
-  function (remote, value) {
+  function (value) {
+    // Will also output: Remoter resolved externally with value 42
     console.log(`Remoter resolved ${this.remote?'externally':'internally'} with value`, value); 
   }
 ); 
@@ -730,7 +733,7 @@ function logNewRemoter () {
   console.log(`Remoter created`, this); 
 }
 
-Remoter.on(logNewRemoter); 
+Remoter.on('create', logNewRemoter); 
 
 const remoter = new Remoter; // Will output: Remoter created Remoter [Promise] <pending>
 ```
@@ -932,7 +935,7 @@ function* asyncEvents (eventEmitter, eventName, errorEventName = 'error') {
 async function main () {
   const eventEmitter = new EventEmitter(); 
   let eventNo = 0; 
-  setInterval(
+  const interval setInterval(
     (...args) => {
       console.log('Emitting event'); 
       eventEmitter.emit(...args, eventNo++); 
@@ -943,6 +946,8 @@ async function main () {
 
   for await (const payload of asyncEvents(eventEmitter, 'myEvent'))
     console.log('myEvent received with payload:', payload); 
+
+  clearInterval(interval); 
 }
 
 main.bind(this)(); 
@@ -1091,10 +1096,10 @@ function getAllDataFrom(source, numberOfIds) {
 }
 
 async function main () {
-  const logTick = (start) => console.log(
-    const timeDiff = ((new Date.getTime() - start.getTime()) / 1000; 
-    `${timeDiff} I am non-blocking 🤗`
-  ); 
+  const logTick = (start) => {
+    const timeDiff = ((new Date).getTime() - start.getTime()) / 1000; 
+    console.log(`${timeDiff} I am non-blocking 🤗`); 
+  }
   const start = new Date; 
   const interval = setInterval(
     logTick, 
@@ -1127,6 +1132,9 @@ I want Remoter to be as usefull as possible which includes being as lightweight 
 
 # ToDo
 - Reduce instance heap footprint by moving abstract functions from constructor closure to module scope 
+- Annotation Slot in the constructor 
+- Event Timing optimization 
+- Lifecycle Property Propagation 
 - Add more examples 
 
 # Open to PR's
