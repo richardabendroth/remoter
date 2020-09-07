@@ -1,4 +1,8 @@
 # Remoter
+![GitHub issues](https://img.shields.io/github/issues/richardabendroth/remoter.svg)
+![license](https://img.shields.io/github/license/richardabendroth/remoter.svg)
+![npm](https://img.shields.io/npm/v/remoter.svg)<br />
+
 Remoter is a remotely resolveable native Javascript Promise that exposes it's resolver and rejector callbacks. It is supposed to help you to keep a somewhat consistent code style when using `asyc`/`await` syntax with functions that have a callback API. It also helps you in debugging Promises and can act as a plug-in replacement for the native Promise. Additionally, it quite lightweight and has zero dependencies. 
 
 # In a nutshell
@@ -1142,3 +1146,6 @@ PR's welcome! Feel free to improve Remoter 🤓. Please find and fix bugs 🙏. 
 
 # License
 MIT.
+
+
+[![NPM](https://nodei.co/npm/remoter.png)](https://npmjs.org/package/remoter)
