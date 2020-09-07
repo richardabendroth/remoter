@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/richardabendroth/remoter/blob/master/remoter.svg" alt="Remoter" width="200"/>
+  <img src="https://raw.githubusercontent.com/richardabendroth/remoter/master/remoter.svg" alt="Remoter" width="200"/>
 </p>
 
 # Remoter
