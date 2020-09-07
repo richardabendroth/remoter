@@ -45,15 +45,15 @@ function writeFileAsync (fileName, data, options) {
 Remoter is not only a then-able, it's an extension of the native Promise. 
 
 # Where is it useful?
-* When you need to promisify a [callback-based API like `fs`](#promisify-callback-based-apis), anything with a [callback with error and result arguments](#promise), [the other way around](#resulterrorcallback), [two callbacks (e.g. onError, onSuccess)](#remoter-1), or [something odd](#customCallbackargumentToken-argumentToken2--argumentToken2N)
-* When you want to use [`await` to wait for events e.g. `EventEmitter.on(...)`](#Awaiting-Events) or [`await sleep(...)`](#for-sugar)
-* When implementing an [abortable/cancelable `Promise`](#Cancelling-request-promises)
-* When your code looks like [a funny mix of `await`, `new Promise`, and `() => 'Arrow Functions'`](#Remotely-resolving-a-Promise) or [looks like a callback hell](#Avoid-async-callback-hells)
+* When you need to promisify a [callback-based API like `fs`](#promisify-callback-based-apis), anything with a [callback with error and result arguments](#promise), [the other way around](#resulterrorcallback), [two callbacks (e.g. onError, onSuccess)](#remoter-1), or [something odd](#customCallbackargumentToken-argumentToken2--argumentToken2n)
+* When you want to use [`await` to wait for events e.g. `EventEmitter.on(...)`](#awaiting-avents) or [`await sleep(...)`](#for-sugar)
+* When implementing an [abortable/cancelable `Promise`](#cancelling-request-promises)
+* When your code looks like [a funny mix of `await`, `new Promise`, and `() => 'Arrow Functions'`](#remotely-resolving-a-Promise) or [looks like a callback hell](#avoid-async-callback-hells)
 * When you generally want to reshape control flow
-* When you want a piece of asynchronous code [to wait for an external event to happen](#Awaiting-Events)
-* When the promise receiving the data is [not directly correlated with the `Promise` returning the value](#Limiting-concurrent-requests)
-* When you woder if the cat is dead or alive but [you don't want to open the box](#Lifecycle-Tracing-A-glimpse-into-Schroedingers-Box)
-* When one of your Promises does not have the value it should have or [you suspect it to be settled more than once](#Find-multi-settling-bugs)
+* When you want a piece of asynchronous code [to wait for an external event to happen](#awaiting-events)
+* When the promise receiving the data is [not directly correlated with the `Promise` returning the value](#limiting-concurrent-requests)
+* When you woder if the cat is dead or alive but [you don't want to open the box](#lifecycle-tracing-a-glimpse-into-schroedingers-box)
+* When one of your Promises does not have the value it should have or [you suspect it to be settled more than once](#find-multi-settling-bugs)
 * Other stuff that is totally up to your creativity! ([Please let me know 🙏](https://github.com/richardabendroth/remoter/issues))
 
 # Installation 
@@ -138,13 +138,13 @@ const promise = new Promise(
 ```
 The necesarry singletons, properties, EventEmitters, and WeakMaps are created the moment you call the `.on` hook the first time. They are destroyed as soon as you `.off` all events. This is true for the introspection events on the Remoter class and the introspection events on the respective remoter instance individually. Each remoter instance holds its own introspection instances, meaning you can introspect a single Promise without bloating the others. This also means you don't need to use the class event hook if you are only looking at a specific Promise. 
 
-The native Promise class is available via [`Remoter.Promise`](#Native-Promise-Class-Property).
+The native Promise class is available via [`Remoter.Promise`](#native-promise-class-property).
 
 Please don't use this functionality to make Promises that can be fulfilled more than once. 
 
 Why? 
 - Promises are meant to be settled only once. You will buy into more problems than you wanted to overcome. Promised. Use an EventEmitter instead: `const EventEmitter = require('events');`. 
-- It won't work as sleak as you expect as you would need to use the `.on` hook and a `.catch` callback instead of the `.then`, `.catch`, or alternatively `.finally` callbacks and end up with an EventEmitter again. If you want to `await` events, there is an example [here](#Awaiting-Events) that shows you how to do that. 
+- It won't work as sleak as you expect as you would need to use the `.on` hook and a `.catch` callback instead of the `.then`, `.catch`, or alternatively `.finally` callbacks and end up with an EventEmitter again. If you want to `await` events, there is an example [here](#awaiting-events) that shows you how to do that. 
 - The introspection API of Remoter uses additional resources, including lightweight EventEmitters (that add to your event loop) and WeakMaps (that use your heap). 
 
 ## API 
@@ -196,7 +196,7 @@ In general, as Remoter is derived from Promise, it can be handed to API's that e
 |✔|`promise instanceof Promise`||
 |✔|`promise.then != undefined` or `promise.then instanceof Function`||
 |(✔)|`Object.prototype.toString.call(promise) == '[object Promise]'`|**This might change in the future!** |
-|❌|`promise.constructor === Promise` or similar|Hand over [`remoter.promise`](#promise) or [`Promise.resolve(remoter)`](#Chaining) instead|
+|❌|`promise.constructor === Promise` or similar|Hand over [`remoter.promise`](#promise) or [`Promise.resolve(remoter)`](#chaining) instead|
 
 Remoter can also be used in places where a library that generates promises has a configuration slot for the promise implementation that it uses to generate the promises it returns. 
 
@@ -239,10 +239,10 @@ For chaining, Remoters are meant to be fully compatible to Promises and vice ver
 
 |Chain call|Result||
 |----------|------|-|
-|`Remoter.resolve(promise)`|new Remoter|The remoter instance is resolved when the promise resolves. Keep in mind that when settling the remoter instance from the outsite using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror) the promise will [**oversaturate**](#oversaturated) immediately when one the of the [`(resolve, reject)`](#Constructor-new-Remoterexecutor) callbacks has been called before or will [**oversaturate**](#oversaturated) in the moment when one of those callbacks is invoked after outside settling via [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror).|
-|`Remoter.resolve(remoter)`|new Remoter|The inner remoter instance can settle from its executor calling one of the [`(resolve, reject)`](#Constructor-new-Remoterexecutor) callbacks and from the outside using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror). The newly created remoter instance will settle in chain with the inner remoter or from the outside using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror). The [`.remote`](#remote) settling property of the outer remoter instance is **tied to the inner remoter's remote settling property**.|
+|`Remoter.resolve(promise)`|new Remoter|The remoter instance is resolved when the promise resolves. Keep in mind that when settling the remoter instance from the outsite using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror) the promise will [**oversaturate**](#oversaturated) immediately when one the of the [`(resolve, reject)`](#constructor-new-remoterexecutor) callbacks has been called before or will [**oversaturate**](#oversaturated) in the moment when one of those callbacks is invoked after outside settling via [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror).|
+|`Remoter.resolve(remoter)`|new Remoter|The inner remoter instance can settle from its executor calling one of the [`(resolve, reject)`](#constructor-new-remoterexecutor) callbacks and from the outside using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror). The newly created remoter instance will settle in chain with the inner remoter or from the outside using [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror). The [`.remote`](#remote) settling property of the outer remoter instance is **tied to the inner remoter's remote settling property**.|
 |`Remoter.resolve(thenable)`|new Remoter|See above `Remoter.resolve(promise)`.|
-|`Promise.resolve(remoter)`|new Promise|As the outer Promise has no executor the settling of the outer Promise is completely dependent on the inner remoter instance which can be settled either through its executor's [`(resolve, reject)`](#Constructor-new-Remoterexecutor) callbacks or its [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror) methods. To obtain a persistent promise instance from the remoter use the [`.promise`](#promise) property of the remoter instance instead.|
+|`Promise.resolve(remoter)`|new Promise|As the outer Promise has no executor the settling of the outer Promise is completely dependent on the inner remoter instance which can be settled either through its executor's [`(resolve, reject)`](#constructor-new-remoterexecutor) callbacks or its [`.resolve([value])`](#resolvevalue) or [`.reject([error])`](#rejecterror) methods. To obtain a persistent promise instance from the remoter use the [`.promise`](#promise) property of the remoter instance instead.|
 
 ### Remoter lifecycle properties  
 #### Result-independent Promise status properties
@@ -251,10 +251,10 @@ For chaining, Remoters are meant to be fully compatible to Promises and vice ver
 Read-only property indicating that the Remoter is pending, meaning it has not been fulfilled or rejected yet, or, if it follows another Remoter, Promise or Thenable, same has not been settled yet. It is `true` if either [.fulfilled](#fulfilled) is `false` or [.rejected](#rejected) is `false`. Otherwise it is `true`. 
 
 ##### .settled
-Read-only property indicating if the Promise is settled, meaning it has either been fulfilled or rejected. It is `true` if [.fulfilled](#fulfilled) is `true` or [.rejected](#rejected) is `true`, **but if the Remoter follows another Remoter, Promise or Thenable, same is not fulfilled yet**, otherwise it is `false`. **See ['.resolved'](#resolved)** for including [chaining](#Chaining) or [composition](#Composition) fates. **You normally want to use this property to see if your Remoter has a value ready!**. 
+Read-only property indicating if the Promise is settled, meaning it has either been fulfilled or rejected. It is `true` if [.fulfilled](#fulfilled) is `true` or [.rejected](#rejected) is `true`, **but if the Remoter follows another Remoter, Promise or Thenable, same is not fulfilled yet**, otherwise it is `false`. **See ['.resolved'](#resolved)** for including [chaining](#chaining) or [composition](#composition) fates. **You normally want to use this property to see if your Remoter has a value ready!**. 
 
 ##### .resolved
-Read-only property that is `true` if the Promise is either fulfilled or rejected or it followes another Remoter, Promise, or Thenable. It is `true` if either [.fulfilled](#fulfilled) or [.rejected](#rejected) is `true` (meaning [`.pending`](#pending) is `false`) or it follows another Remoter, Promise or Thenable throgh [chaining](#Chaining) or [composition](#Composition). **You normally want to use [`.settled`](#settled) to see if your Remoter has a value ready!**. 
+Read-only property that is `true` if the Promise is either fulfilled or rejected or it followes another Remoter, Promise, or Thenable. It is `true` if either [.fulfilled](#fulfilled) or [.rejected](#rejected) is `true` (meaning [`.pending`](#pending) is `false`) or it follows another Remoter, Promise or Thenable throgh [chaining](#chaining) or [composition](#composition). **You normally want to use [`.settled`](#settled) to see if your Remoter has a value ready!**. 
 
 ##### .oversaturated
 Read-only property indicating if there was an attempt to settle the promise more than once. While it is possible to call a reject or resolve callback of a Promise multiple times, the respective settling callbacks get only called once. This property allows for introspection if that happend: 
@@ -284,7 +284,7 @@ setTimeout(
     1.5e3
 ); 
 ```
-If you suspect one of your Promises to be settled more than once, there is a [lifecycle event](#Find-multi-settling-bugs) that helps you in finding out. 
+If you suspect one of your Promises to be settled more than once, there is a [lifecycle event](#find-multi-settling-bugs) that helps you in finding out. 
 
 #### Result-dependent Promise status properties 
 Remoter offers read-only properties to expose its state to code outside the executor and settling callbacks. Those are set right before the settling callbacks attached via [.then](#then), [.catch](#catch), and [.finally](#finally) are invoked. 
@@ -396,37 +396,37 @@ remoter.then(
 remoter.resolve(42);
 ```
 
-Remoter uses the **prototype attribute** of the callback to determine which behavior to employ. If the prototype is `undefined`, the 2nd argument option is employed instead of a bound `this` context pointing to the remoter instance. Keep in mind that some loggers and console.log are bound functions and native functions might lack a prototype property. In those cases, Remoter will pass the remoter instance alongside the value as an additional (in this exampe second) argument to the callback. To overcome this behavior you can wrap the function into an **anonymous function**, e.g. `remoter.then(function (targetLength) { return 'silly'.pad(targetLength) });` or turn off this behavior using the [`.instanceArgument`](#instanceArgument) setting. 
+Remoter uses the **prototype attribute** of the callback to determine which behavior to employ. If the prototype is `undefined`, the 2nd argument option is employed instead of a bound `this` context pointing to the remoter instance. Keep in mind that some loggers and console.log are bound functions and native functions might lack a prototype property. In those cases, Remoter will pass the remoter instance alongside the value as an additional (in this exampe second) argument to the callback. To overcome this behavior you can wrap the function into an **anonymous function**, e.g. `remoter.then(function (targetLength) { return 'silly'.pad(targetLength) });` or turn off this behavior using the [`.instanceArgument`](#instanceargument) setting. 
 
 #### .then(thenCallback[, catchCallback]) 
 
 Identical to the native Promise `.then` method. When lifecycle introspection callbacks are attached to the remoter instance additionally emits `then` event with *thenCallback* as payload argument. If *catchCallback* is given, also emits `catch` event with *catchCallback* as payload argument. Except, when *thenCallback* and *catchCallback* are identical, emits `finally` event with *thenCallback* as payload argument. 
 
-If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#Claim-settled-Remoter-results) and [`.instanceArgument`](#instanceArgument) for more information. 
+If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#claim-settled-remoter-results) and [`.instanceArgument`](#instanceargument) for more information. 
 
 #### .catch(catchCallback) 
 
 Identical to the native Promise `.catch` method. When lifecycle introspection callbacks are attached to the remoter instance additionally emits `catch` event with *catchCallback* as payload argument. 
 
-If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#Claim-settled-Remoter-results) and [`.instanceArgument`](#instanceArgument) for more information. 
+If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#claim-settled-remoter-results) and [`.instanceArgument`](#instanceargument) for more information. 
 
 #### .finally(finallyCallback)
 
 Identical to the native Promise `.finally` method. When lifecycle introspection callbacks are attached to the remoter instance additionally emits `finally` event with *finallyCallback* as payload argument. 
 
-If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#Claim-settled-Remoter-results) and [`.instanceArgument`](#instanceArgument) for more information. 
+If possible, Remoter automatically sets the `this` context of the callback to the **remoter instance**. See [Claim settled Remoter results](#claim-settled-remoter-results) and [`.instanceArgument`](#instanceargument) for more information. 
 
-In contrast to the native Promise, callbacks registered using `.finally` are passed an *errorOrValue* argument. This functionality can be turned off for the remoter instance either by wrapping the callback in a function, e.g. `remoter.finally(onlyOneArgument => yourCallback(onlyOneArgument))`, by setting the [`.finallyArgument`](#finallyArgument) property to *false* or by setting the [`Remoter.finallyArgument`](#RemoterfinallyArgument) global setting to *false*. 
+In contrast to the native Promise, callbacks registered using `.finally` are passed an *errorOrValue* argument. This functionality can be turned off for the remoter instance either by wrapping the callback in a function, e.g. `remoter.finally(onlyOneArgument => yourCallback(onlyOneArgument))`, by setting the [`.finallyArgument`](#finallyargument) property to *false* or by setting the [`Remoter.finallyArgument`](#Remoterfinallyargument) global setting to *false*. 
 
 #### .finallyArgument
 `.finallyArgument` is a boolean property, that when set to *false* prevents passing of an errorOrValue argument to callbacks registered via `.finally`. When set to *true*, enables the this behavior. This setting overrides the corresponding [`Remoter.finallyArgument`](#RemoterfinallyArgument) setting. When set to *null*, the global setting is used. 
 
-Default is *null* (uses global setting from [`Remoter.finallyArgument`](#RemoterfinallyArgument)). 
+Default is *null* (uses global setting from [`Remoter.finallyArgument`](#remoterfinallyargument)). 
 
 #### .instanceArgument
-`.instanceArgument` is a boolean property, that when set to *false* disables the addition of the instance reference to the arguments list when the `.then`, `.catch` and `.finally` callbacks are invoked for those registered callbacks that do not have a prototype (*ArrowFunctions* and *Bound Functions*). When set to *true*, enables the this behavior. This setting overrides the corresponding [`Remoter.instanceArgument`](#RemoterinstanceArgument) setting. When set to *null*, the global setting is used. 
+`.instanceArgument` is a boolean property, that when set to *false* disables the addition of the instance reference to the arguments list when the `.then`, `.catch` and `.finally` callbacks are invoked for those registered callbacks that do not have a prototype (*ArrowFunctions* and *Bound Functions*). When set to *true*, enables the this behavior. This setting overrides the corresponding [`Remoter.instanceArgument`](#remoterinstanceargument) setting. When set to *null*, the global setting is used. 
 
-Default is *null* (uses global setting from [`Remoter.instanceArgument`](#RemoterinstanceArgument)). 
+Default is *null* (uses global setting from [`Remoter.instanceArgument`](#remoterinstanceargument)). 
 
 ### Instantiation shortcuts 
 To instanciate either a Remoter and it's resolver and rejector or a Promise with a callback, or any combination of those, a remoter instance provides the `.remoter` and `.promise` properties. 
@@ -465,7 +465,7 @@ asyncEchoFunction(
 ```
 
 #### .promise 
-The `.promise` property returns a persistent reference to a native Promise using [`Promise.resolve(remoter)`](#Chaining) that settles with the remoter instance. 
+The `.promise` property returns a persistent reference to a native Promise using [`Promise.resolve(remoter)`](#chaining) that settles with the remoter instance. 
 ```javascript
 const {promise, callback} = new Remoter; 
 ```
@@ -755,16 +755,16 @@ The `Remoter.Promise` property gives read-only access to the native `Promise` cl
 const Remoter = require('remoter'); 
 console.log(Remoter.Promise === Promise); // Will output: true
 ```
-This is useful in case you [replaced](#Plug-in-replacement) `Promise` with `Remoter`.
+This is useful in case you [replaced](#plug-in-replacement) `Promise` with `Remoter`.
 
 ##### Remoter.finallyArgument
-`Remoter.finallyArgument` is a boolean property, that when set to *false* prevents passing of an errorOrValue argument to callbacks registered via `.finally`. When set to *true*, enables the this behavior. This setting can be overridden on the remoter instance with the corresponding [`.finallyArgument`](#finallyArgument) property. It is advisable to set this proptery to *false* if the callbacks registered using `.finally` TODO!!!!!!. 
+`Remoter.finallyArgument` is a boolean property, that when set to *false* prevents passing of an errorOrValue argument to callbacks registered via `.finally`. When set to *true*, enables the this behavior. This setting can be overridden on the remoter instance with the corresponding [`.finallyArgument`](#finallyargument) property. It is advisable to set this proptery to *false* if the callbacks registered using `.finally` TODO!!!!!!. 
 
 Default is *true*. 
 
 
 ##### Remoter.instanceArgument
-`Remoter.instanceArgument` is a boolean property, that when set to *false* disables the addition of the instance reference to the arguments list when the `.then`, `.catch` and `.finally` callbacks are invoked for those registered callbacks that do not have a prototype (*ArrowFunctions* and *Bound Functions*). When set to *true*, enables this behavior. This setting can be overridden on the remoter instance with the corresponding [`.instanceArgument`](#instanceArgument) property. 
+`Remoter.instanceArgument` is a boolean property, that when set to *false* disables the addition of the instance reference to the arguments list when the `.then`, `.catch` and `.finally` callbacks are invoked for those registered callbacks that do not have a prototype (*ArrowFunctions* and *Bound Functions*). When set to *true*, enables this behavior. This setting can be overridden on the remoter instance with the corresponding [`.instanceArgument`](#instanceargument) property. 
 
 Default is *true*. 
 
