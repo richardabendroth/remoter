@@ -183,6 +183,7 @@ class Remoter extends Promise {
         claimed = false, 
         caught = false, 
         finalized = false;
+    let following; 
     // Promise callback Decorator 
     const isPromiseOrThenable = (promiseOrThenable) => 
       promiseOrThenable && (
@@ -197,6 +198,7 @@ class Remoter extends Promise {
         remote = remotely; 
         if (isPromiseOrThenable(value)) {
           follows = true; 
+          following = value; 
           void notify(!remotely, 'follows', value); 
         } else {
           propertySetter(); 
@@ -452,7 +454,7 @@ class Remoter extends Promise {
         },
         // Result-independent Promise status properties 
         'pending': {
-          get: () => !fulfilled && !rejected, 
+          get: () => !this.fulfilled && !this.rejected, 
           set: () => { throw new Error(`'pending' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
@@ -464,7 +466,7 @@ class Remoter extends Promise {
           enumerable: false,
         },
         'oversaturated': {
-          get: () => oversaturated,
+          get: () => oversaturated || (follows ? following.oversaturated : oversaturated), 
           set: () => { throw new Error(`'oversaturated' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
@@ -477,13 +479,13 @@ class Remoter extends Promise {
           enumerable: false,
         },
         'fulfilled': {
-          get: () => fulfilled,
+          get: () => follows ? following.fulfilled : fulfilled, 
           set: () => { throw new Error(`'fulfilled' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'rejected': {
-          get: () => rejected,
+          get: () => follows ? following.rejected : rejected,
           set: () => { throw new Error(`'rejected' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
@@ -509,32 +511,32 @@ class Remoter extends Promise {
         }, 
         // Remote status property
         'remote': {
-          get: () => remote,
+          get: () => follows ? following.remote : remote, 
           set: () => { throw new Error(`'remote' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         // Result and remote status sugar
         'settledRemotely': {
-          get: () => this.settled && remote == true,
+          get: () => this.settled && this.remote == true,
           set: () => { throw new Error(`'fulfilledRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'resolvedRemotely': {
-          get: () => this.resolved && remote == true,
+          get: () => this.resolved && this.remote == true,
           set: () => { throw new Error(`'resolvedRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'fulfilledRemotely': {
-          get: () => fulfilled && remote == true,
+          get: () => this.fulfilled && this.remote == true,
           set: () => { throw new Error(`'fulfilledRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,
         },
         'rejectedRemotely': {
-          get: () => rejected && remote  == true,
+          get: () => this.rejected && this.remote  == true,
           set: () => { throw new Error(`'rejectedRemotely' is not mutable on a ${this.constructor.name}.`); },
           configurable: false,
           enumerable: false,

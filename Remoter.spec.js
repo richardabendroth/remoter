@@ -1536,7 +1536,7 @@ describe(Remoter.name, () => {
         ); 
         remoter.resolve(testValue); 
       });
-      xit(`.settled (extrinisc composition), .settledRemotely`, function (done) {
+      it(`.settled (extrinisc composition), .settledRemotely`, function (done) {
         this.timeout(5e2); 
         const testValue = Symbol('value'); 
         const leader = new Remoter(
@@ -1548,8 +1548,7 @@ describe(Remoter.name, () => {
         remoter.then(
           function (value) {
             expect(value).to.equal(testValue); 
-            /* TODO: Doesn't work */
-            //expect(this.settled).to.be.false; 
+            expect(this.settled).to.be.true; 
             expect(this.remote).to.be.true; 
             expect(this.settledRemotely).to.be.true; 
             done(); 
@@ -1731,7 +1730,34 @@ describe(Remoter.name, () => {
         expect(remoter.finalized).to.be.false; 
       }); 
     });
-
+    describe(`Realm/State/Fate property chaining`, () => {
+      it(`Property chaining`, function (done) {
+        this.timeout(5e2); 
+        const testValue = Symbol('value'); 
+        const outerRemoter = new Remoter; 
+        const innerRemoter = new Remoter; 
+        expect(outerRemoter.remote).to.be.null; 
+        expect(outerRemoter.fulfilled).to.be.false; 
+        expect(outerRemoter.settled).to.be.false; 
+        expect(outerRemoter.resolved).to.be.false; 
+        outerRemoter.resolve(innerRemoter); 
+        expect(outerRemoter.remote).to.be.null; 
+        expect(outerRemoter.fulfilled).to.be.false; 
+        expect(outerRemoter.settled).to.be.false; 
+        expect(outerRemoter.resolved).to.be.true; 
+        innerRemoter.fulfill(testValue); 
+        expect(outerRemoter.remote).to.be.true; 
+        expect(outerRemoter.fulfilled).to.be.true; 
+        expect(outerRemoter.settled).to.be.true; 
+        expect(outerRemoter.resolved).to.be.true; 
+        outerRemoter.then(
+          value => {
+            expect(value).to.equal(testValue); 
+            done(); 
+          }
+        )
+      });
+    });
     describe(`Sugar`, () => {
       it(`.settledRemotely explicitly tested via .settled tests`, () => {
         // Purposefully left blank
@@ -1740,7 +1766,6 @@ describe(Remoter.name, () => {
         // Purposefully left blank
       }); 
       it(`.fulfilledRemotely explicitly tested via .fulfilled tests`, () => {
-        /* TODO: DOC ARE WRONG! */
         // Purposefully left blank
       }); 
       it(`.rejectedRemotely explicitly tested via .rejected tests`, () => {

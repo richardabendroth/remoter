@@ -240,13 +240,13 @@ For chaining, Remoters are meant to be fully compatible to Promises and vice ver
 #### Result-independent Promise status properties
 
 ##### .pending
-Read-only property indicating that the Remoter is pending, meaning it has not been fulfilled or rejected yet. It is ``true`` if either [.fulfilled](#fulfilled) is ``false`` or [.rejected](#rejected) is ``false``. Otherwise it is ``true``. 
+Read-only property indicating that the Remoter is pending, meaning it has not been fulfilled or rejected yet, or, if it follows another Remoter, Promise or Thenable, same has not been settled yet. It is `true` if either [.fulfilled](#fulfilled) is `false` or [.rejected](#rejected) is `false`. Otherwise it is `true`. 
 
 ##### .settled
-Read-only property indicating if the Promise is settled, meaning it has either been fulfilled or rejected. It is ``true`` if [.fulfilled](#fulfilled) is ``true`` or [.rejected](#rejected) is ``true``, otherwise it is ``false``. **See ['.resolved'](#resolved)** for also include [chaining](#Chaining) or [composition](#Composition) fates **(which is what you normally want)**. 
+Read-only property indicating if the Promise is settled, meaning it has either been fulfilled or rejected. It is `true` if [.fulfilled](#fulfilled) is `true` or [.rejected](#rejected) is `true`, **but if the Remoter follows another Remoter, Promise or Thenable, same is not fulfilled yet**, otherwise it is `false`. **See ['.resolved'](#resolved)** for including [chaining](#Chaining) or [composition](#Composition) fates. **You normally want to use this property to see if your Remoter has a value ready!**. 
 
 ##### .resolved
-Read-only property that is `true` if the Promise is either fulfilled or rejected or it followes another Remoter, Promise, or Thenable. It is ``true`` if either [.fulfilled](#fulfilled) or [.rejected](#rejected) is ``true`` (meaning [`.pending`](#pending) is `false`) or it followes another Remoter, Promise or Thenable throgh [chaining](#Chaining) or [composition](#Composition). 
+Read-only property that is `true` if the Promise is either fulfilled or rejected or it followes another Remoter, Promise, or Thenable. It is `true` if either [.fulfilled](#fulfilled) or [.rejected](#rejected) is `true` (meaning [`.pending`](#pending) is `false`) or it follows another Remoter, Promise or Thenable throgh [chaining](#Chaining) or [composition](#Composition). **You normally want to use [`.settled`](#settled) to see if your Remoter has a value ready!**. 
 
 ##### .oversaturated
 Read-only property indicating if there was an attempt to settle the promise more than once. While it is possible to call a reject or resolve callback of a Promise multiple times, the respective settling callbacks get only called once. This property allows for introspection if that happend: 
@@ -282,10 +282,10 @@ If you suspect one of your Promises to be settled more than once, there is a [li
 Remoter offers read-only properties to expose its state to code outside the executor and settling callbacks. Those are set right before the settling callbacks attached via [.then](#then), [.catch](#catch), and [.finally](#finally) are invoked. 
 
 ##### .fulfilled
-Read-only property that is `false` while the Promise is pending. Returns `true` from the moment **right before the user-defined resolver is executed**.
+Read-only property that is `false` while the Remoter is pending. If the Remoter follows another Remoter, Promise or Thenable, it will turn `true` when that Remoter, Promise or Thenable is fulfulled. Returns `true` from the moment **right before the user-defined resolver is executed** (if there is one defined).
 
 ##### .rejected
-Read-only property that is `false` while the Promise is pending. Returns `true` from the moment **right before the user-defined rejector is executed**.
+Read-only property that is `false` while the Remoter is pending. If the Remoter follows another Remoter, Promise or Thenable, it will turn `true` when that Remoter, Promise or Thenable is rejected. Returns `true` from the moment **right before the user-defined rejector is executed**  (if there is one defined).
 
 #### Remote settling state
 
@@ -326,17 +326,17 @@ resolvedRightAway.then(
 #### Result and remote status sugar
 For your convenience Remoter provides read-only sugar properties to detect all combinations of settling status and remote status of a remoter instance. 
 
-##### .settledRemotely
-Read-only property that is `true` when the Remoter has been settled using [.resolve([value])](#resolvevalue) or [rejecte([error])](#rejecterror), otherwise `false`. It will always be `true` when `.remote` is `true`. 
-
 ##### .resolvedRemotely
-Read-only property that is `true` when the Remoter has been resolved using [.resolve([value])](#resolvevalue), otherwise `false`. It is sugar for `remoter.remote && remoter.resolved`. 
+Read-only property that is `true` when the Remoter has been resolved using [.resolve([value])](#resolvevalue) or the remoter follows another Remoter, Promise or Thenable that has been fulfilled or rejected, otherwise `false`. It is sugar for `remoter.remote && remoter.resolved`. 
+
+##### .settledRemotely
+Read-only property that is `true` when the Remoter has been settled using [.resolve([value])](#resolvevalue), rejected [.reject([error])](#rejecterror) or the remoter follows another Remoter, Promise or Thenable that has been rejected, otherwise `false`. It will always be `true` when `.remote` is `true`. It is sugar for `remoter.remote && remoter.settled`. 
 
 ##### .fulfilledRemotely
-Alias for [.resolvedRemotely](#resolvedremotely). 
+Read-only property that is `true` when the Remoter has been fulfilled using [.fulfill([value])](#fulfillvalue), [.resolve([value])](#resolvevalue) or the remoter follows another Remoter, Promise or Thenable that has been fulfilled, otherwise `false`. It is sugar for `remoter.remote && remoter.fulfilled`. 
 
 ##### .rejectedRemotely
-Read-only property that is `true` when the Remoter has been rejected using [.reject([error])](#rejectederror), otherwise `false`. It is sugar for `remoter.remote && remoter.rejected`. 
+Read-only property that is `true` when the Remoter has been rejected using [.reject([error])](#rejectederror) or the remoter follows another Remoter, Promise or Thenable that has been rejected, otherwise `false`. It is sugar for `remoter.remote && remoter.rejected`. 
 
 #### Result-handling status properties
 Remoter offers status properties to determine if the value or error of a settled Promise has already been delivered to a callback registered via [.then](#thenthencallback-catchcallback), [.catch](#catchcatchcallback), or [.finally](#finallyfinallycallback) at least once. See also [lifecycle events](#oneventName-callback). 
@@ -1134,7 +1134,6 @@ I want Remoter to be as usefull as possible which includes being as lightweight 
 - Reduce instance heap footprint by moving abstract functions from constructor closure to module scope 
 - Annotation Slot in the constructor 
 - Event Timing optimization 
-- Lifecycle Property Propagation 
 - Add more examples 
 
 # Open to PR's
