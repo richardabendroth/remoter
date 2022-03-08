@@ -258,7 +258,7 @@ class Remoter extends Promise {
     }
 
     // Callback sugar
-    const generateCallback = function generalteCallback (...tokens) {
+    const generateCallback = function generateCallback (...tokens) {
       // Verify Signature
       const tokenPresence = {}; 
       for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
@@ -293,8 +293,8 @@ class Remoter extends Promise {
       const isCompoundCallback = hasErrorToken && hasResultToken; 
       // Generate Callback
       return (...args) => {
-        // If error argument is truthy or signature only contains error token, e.g. onError(err)
-        if (tokenPresence[CB_ERROR] != undefined && (!isCompoundCallback || !!args[tokenPresence[CB_ERROR]])) {
+        // If error argument present and truthy, e.g. onError(err)
+        if (tokenPresence[CB_ERROR] != undefined && !!args[tokenPresence[CB_ERROR]]) {
           extrinsicRejector.call(this, args[tokenPresence[CB_ERROR]]); 
           return; 
         } 
@@ -311,7 +311,8 @@ class Remoter extends Promise {
             return; 
           }
         } 
-        // Resolve if result token present and not rejected 
+        // Resolve if result token present and not rejected or no  
+        // result token present 
         if (tokenPresence[CB_RESULT] != undefined) 
           extrinsicResolver.call(this, args[tokenPresence[CB_RESULT]]) 
         else if (tokenPresence[CB_RESULTS] != undefined) 
@@ -319,6 +320,8 @@ class Remoter extends Promise {
             this, 
             args.slice(tokenPresence[CB_RESULTS])
           );
+        else 
+          extrinsicResolver.call(this);
       }
     }
     // Default callbacks
