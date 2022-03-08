@@ -1878,24 +1878,36 @@ describe(Remoter.name, () => {
       }); 
       it(`(CB_ERROR) rejects (error)`, function (done) {
         this.timeout(5e2); 
-        const result = Symbol('result'); 
+        const error = new Error('error'); 
         const remoter = new Remoter; 
         remoter.catch(
           function (error) {
-            expect(error).to.equal(result); 
+            expect(error).to.equal(error); 
             expect(this.rejectedRemotely).to.be.true; 
             done(); 
           }
         ); 
-        remoter.customCallback(Remoter.CB_ERROR)(result); 
+        remoter.customCallback(Remoter.CB_ERROR)(error); 
       }); 
-      it(`(CB_ERROR) rejects when (<falsy>)`, function (done) {
+      it(`(CB_ERROR) rejects when (<truthy>)`, function (done) {
         this.timeout(5e2); 
+        const error = 1; 
         const remoter = new Remoter; 
         remoter.catch(
-          function (error) {
-            expect(error).to.be.not.ok; 
+          function (e) {
+            expect(e).to.equal(error); 
             expect(this.rejectedRemotely).to.be.true; 
+            done(); 
+          }
+        ); 
+        remoter.customCallback(Remoter.CB_ERROR)(error); 
+      }); 
+      it(`(CB_ERROR) does not reject when (<falsy>)`, function (done) {
+        this.timeout(5e2); 
+        const remoter = new Remoter; 
+        remoter.then(
+          function () {
+            expect(this.resolvedRemotely).to.be.true; 
             done(); 
           }
         ); 
